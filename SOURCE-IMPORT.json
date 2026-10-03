@@ -1,0 +1,77 @@
+{
+  "repository": "auto-database",
+  "date": "2026-10-03",
+  "sources": [
+    {
+      "repo": "auto-lang",
+      "commit": "17292c07e792e80d4e4da5495fc3fc2917e8aa1e",
+      "path": "examples/ui/026-database",
+      "primary": true,
+      "fileCount": 10,
+      "pacFields": {
+        "name": "database",
+        "version": "0.1.0",
+        "description": "SQLite visual database studio - Object Tree, Paginated DataTable, SQL Console, Schema Inspector (vue/vm)",
+        "scene": "ui",
+        "render": "vue",
+        "title": "Database Studio",
+        "title_zh": "数据库工作室",
+        "front_port": "4026",
+        "desktop": "true"
+      },
+      "files": [
+        {
+          "sourcePath": "examples/ui/026-database/README.md",
+          "path": "README.md",
+          "sha256": "57eceedc71c5175be4d83ab4fc71500e307dffa6c1f5a9063e4cefc410c5a48b"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/SPEC.md",
+          "path": "SPEC.md",
+          "sha256": "c1fd450e9f7611e2f1d6941b121e69608b142885bbaf1f5b7c13371539e95992"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/pac.at",
+          "path": "pac.at",
+          "sha256": "754b6c47633237f2ebd1e37ed982cfecab2d4ae14624b49a63c78f6e4a836108"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/app.at",
+          "path": "src/front/app.at",
+          "sha256": "b08c79c9f6ed794a19b51303435518d20cc84c1e4cf8c3266e0bbc29d113e365"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/components/filetree.at",
+          "path": "src/front/components/filetree.at",
+          "sha256": "ba5de834ced6d3fc3af0ba8da558f834a1078ea6528ae73b991610a14651f298"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/components/package.at",
+          "path": "src/front/components/package.at",
+          "sha256": "b6ff9789c1eda5afa914dd12724120f8ac2ed61f683a23315e0b8466ffe0317e"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/components/tree_icon.at",
+          "path": "src/front/components/tree_icon.at",
+          "sha256": "28f42744a474eb9953abd965aff9c64c54bbd802dc4c7740e7ce32053fefe391"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/components/tree_util.at",
+          "path": "src/front/components/tree_util.at",
+          "sha256": "4f4ba6028ca4bc1a39091b3de8103a0bcb1a5c02ae348bebbb6ac1af268ba7a7"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/src/front/components/treeview.at",
+          "path": "src/front/components/treeview.at",
+          "sha256": "31bb0990910c124f575e380561efd5b467ac0e5b4421678fd70be3f322934335"
+        },
+        {
+          "sourcePath": "examples/ui/026-database/tests/desktop_mcp.py",
+          "path": "tests/desktop_mcp.py",
+          "sha256": "eff2406648ec7a7344f20b020ad032aa1c2dc0cf1b6567811318c674a06e0ff6"
+        }
+      ]
+    }
+  ],
+  "note": "Exact committed source snapshots; packaging changes follow in a separate commit. References are not additional installed apps."
+}
