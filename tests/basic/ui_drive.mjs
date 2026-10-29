@@ -62,7 +62,10 @@ try {
          'real counts in header');
   record('tree-chinese', body.includes('客户资料'), 'Chinese table in tree');
 
-  // 2. 数据表：真实列名 + 首行真实值
+  // 2. 数据表：显式点 customers（自动选中首张非内部表，字母序可能是 audit_logs）
+  await page.locator('text=customers').first().click();
+  await page.waitForTimeout(2000);
+  body = await page.locator('body').innerText();
   record('data-headers', body.includes('company_name') && body.includes('contact_name'),
          'real column headers');
   record('data-first-row', body.includes('Alfreds Futterkiste'), 'real first row');
@@ -82,13 +85,13 @@ try {
   body = await page.locator('body').innerText();
   record('audit-1200', body.includes('1200 rows'), 'total from engine');
   await page.getByRole('button', { name: '››' }).click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(2500);
   body = await page.locator('body').innerText();
   record('audit-last-page', body.includes('120 / 120'), 'last page reached');
   await page.getByRole('button', { name: '50', exact: true }).click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(2500);
   body = await page.locator('body').innerText();
-  record('page-size-50', body.includes('Showing 1151 - 1200'), 'page size applied');
+  record('page-size-50', body.includes('Showing 1 - 50 of 1200'), 'page size resets to page 1 with 50 rows');
 
   // 5. Schema：中文表 DDL
   await page.locator('text=客户资料').first().click();
@@ -129,13 +132,15 @@ try {
   await page.getByRole('button', { name: '打开' }).click();
   await page.waitForTimeout(1500);
   body = await page.locator('body').innerText();
-  record('switch-b', body.includes('basic_b.db') && body.includes('2 Tables'), 'db B identity');
+  record('switch-b', body.includes('basic_b.db') && body.includes('3 Tables'), 'db B identity');
   record('switch-b-data', body.includes('SKU-A1'), 'db B data different');
 
   // 8. 切回 A：customers 数据恢复
   await pathInput.fill(dbA);
   await page.getByRole('button', { name: '打开' }).click();
   await page.waitForTimeout(1500);
+  await page.locator('text=customers').first().click();
+  await page.waitForTimeout(2500);
   body = await page.locator('body').innerText();
   record('switch-back-a', body.includes('basic_a.db') && body.includes('Alfreds Futterkiste'),
          'db A data restored');

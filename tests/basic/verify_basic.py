@@ -158,6 +158,27 @@ def stop_service(proc, log, port):
     time.sleep(1)
 
 
+def fetch_columns(base, path, tname):
+    code, cl = http("POST", base + "/api/db/columns",
+                    {"path": path, "tname": tname}, timeout=20)
+    if isinstance(cl, dict) and cl.get("ok"):
+        return [c["name"] for c in cl.get("columns", [])]
+    return []
+
+
+def interleave_rows(cells, ncols, nrows):
+    """cells: interleaved value,flag per cell -> rows of None/str."""
+    rows = []
+    for r in range(nrows):
+        row = []
+        for c in range(ncols):
+            idx = (r * ncols + c) * 2
+            flag = cells[idx + 1]
+            row.append(None if flag == "1" else cells[idx])
+        rows.append(row)
+    return rows
+
+
 def sha256(path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest()
 
@@ -219,21 +240,15 @@ def api_battery(cli, workdir):
 
         # table_data vs oracle (values + NULL flags), Chinese table included
         for tname, order in (("customers", "id"), ("客户资料", "id")):
+            cols = fetch_columns(base, a_db, tname)
+            want_cols = [r[1] for r in oracle(a_db, "PRAGMA table_info(%s)" % tname)]
+            nc = len(cols)
             code, td = post("/api/db/table_data", {"path": a_db, "tname": tname, "page": 1,
                                                    "page_size": 50, "sort_col": order,
                                                    "sort_dir": "asc", "search": ""})
-            cols = [c["name"] for c in td.get("columns", [])] if isinstance(td, dict) else []
-            want_cols = [r[1] for r in oracle(a_db, "PRAGMA table_info(%s)" % tname)]
-            nc = len(cols)
             got_rows = []
-            got_nulls = []
             if isinstance(td, dict) and td.get("ok") and nc:
-                rows_n = td.get("showing", 0)
-                for r in range(rows_n):
-                    row = td["cells"][r * nc:(r + 1) * nc]
-                    nl = td["nulls"][r * nc:(r + 1) * nc]
-                    got_rows.append([None if nl[i] == 1 else row[i] for i in range(nc)])
-                    got_nulls.append(nl)
+                got_rows = interleave_rows(td.get("cells", []), nc, td.get("showing", 0))
             want_rows = [[None if v is None else str(v) for v in row]
                          for row in oracle(a_db, "SELECT * FROM %s ORDER BY %s" % (tname, order))]
             record("v01-table-%s" % tname, got_rows == want_rows and cols == want_cols,
@@ -265,13 +280,11 @@ def api_battery(cli, workdir):
             ("null-unicode", "SELECT id, 姓名, 备注 FROM 客户资料 ORDER BY id"),
         ):
             code, q = post("/api/db/query", {"path": a_db, "sql": sql})
-            nc = len(q.get("columns", [])) if isinstance(q, dict) else 0
+            nc = q.get("ncols", 0) if isinstance(q, dict) else 0
             got = []
             if isinstance(q, dict) and q.get("ok") and nc:
-                for r in range(q.get("rowcount", 0)):
-                    row = q["cells"][r * nc:(r + 1) * nc]
-                    nl = q["nulls"][r * nc:(r + 1) * nc]
-                    got.append([None if nl[i] == 1 else row[i] for i in range(nc)])
+                cells = q.get("cells", [])[nc:]
+                got = interleave_rows(cells, nc, q.get("rowcount", 0))
             want = [[None if v is None else str(v) for v in row] for row in oracle(a_db, sql)]
             record("v01-query-%s" % name, got == want, "rows got=%d want=%d" % (len(got), len(want)))
 
@@ -319,7 +332,7 @@ def api_battery(cli, workdir):
         # sentinel value + file hashes unchanged (AC-03 oracle)
         code, q = post("/api/db/query", {"path": a_db,
                                          "sql": "SELECT v FROM __sentinel WHERE k='guard'"})
-        val = q["cells"][0] if isinstance(q, dict) and q.get("cells") else "?"
+        val = q["cells"][q["ncols"]] if isinstance(q, dict) and q.get("cells") else "?"
         record("v03-sentinel-value", val == "original-value-固定哨兵", "v=%s" % val)
         record("v03-hash-unchanged-a", sha256(a_db) == hash_a_before, "sha256(basic_a.db)")
         record("v03-hash-unchanged-b", sha256(b_db) == hash_b_before, "sha256(basic_b.db)")
@@ -351,10 +364,10 @@ def api_battery(cli, workdir):
         record("v04-open-b", isinstance(m, dict) and m.get("ok") is True and m.get("tables") == 3,
                json.dumps(m, ensure_ascii=False)[:120])
         code, q = post("/api/db/query", {"path": b_db, "sql": "SELECT v FROM __sentinel WHERE k='guard'"})
-        val_b = q["cells"][0] if isinstance(q, dict) and q.get("cells") else "?"
+        val_b = q["cells"][q["ncols"]] if isinstance(q, dict) and q.get("cells") else "?"
         record("v04-switch-results-change", val_b == "b-side-哨兵", "b sentinel=%s" % val_b)
         code, q = post("/api/db/query", {"path": a_db, "sql": "SELECT v FROM __sentinel WHERE k='guard'"})
-        val_a = q["cells"][0] if isinstance(q, dict) and q.get("cells") else "?"
+        val_a = q["cells"][q["ncols"]] if isinstance(q, dict) and q.get("cells") else "?"
         record("v04-switch-back", val_a == "original-value-固定哨兵", "a sentinel=%s" % val_a)
 
         # handle release: no server-side persistent connection → file renameable
@@ -425,8 +438,10 @@ def ui_battery(cli, workdir, profile):
     kill_stale("auto-database")
     proc = spawn()
     ready = False
-    for attempt in range(3):
-        deadline = time.time() + 420
+    # 首次 dev-profile 冷构建可达 20+ 分钟（与 release 缓存不共享）；只有在
+    # 进程已退出时才快速重试，构建中绝不打断。
+    for attempt in range(2):
+        deadline = time.time() + (1500 if attempt == 0 else 600)
         while time.time() < deadline:
             code, body = http("POST", "http://127.0.0.1:%d/api/db/open" % back,
                               {"path": "___probe_missing___"}, timeout=4)
@@ -436,8 +451,23 @@ def ui_battery(cli, workdir, profile):
             if proc.poll() is not None:
                 break
             time.sleep(3)
-        if ready or proc.poll() is None and ready:
+        if ready:
             break
+        if proc.poll() is None and attempt == 0:
+            # 构建仍在进行：继续等同一进程，不要杀掉重来
+            print("WARN: ui run still building; extending wait", flush=True)
+            deadline = time.time() + 1200
+            while time.time() < deadline:
+                code, body = http("POST", "http://127.0.0.1:%d/api/db/open" % back,
+                                  {"path": "___probe_missing___"}, timeout=4)
+                if code in (200, 400) and isinstance(body, dict) and "err_code" in body:
+                    ready = True
+                    break
+                if proc.poll() is not None:
+                    break
+                time.sleep(5)
+            if ready:
+                break
         print("WARN: ui run not ready (attempt %d)" % (attempt + 1), flush=True)
         kill_port(back)
         kill_port(front)

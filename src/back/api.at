@@ -65,31 +65,54 @@ pub type SchemaResult = {
     indexes: []IndexInfo
 }
 
-/// 表/视图数据页：cells/nulls 为行优先扁平化（index = row*列数 + col，
-/// 列数=columns.len()）；nulls 同型 0/1 标志。真实列名/类型来自
-/// PRAGMA table_info；total 为过滤后总数。
-pub type TableData = {
+/// 列模型清单（独立端点：VM 客户端解码边界 G-5——响应结构至多一个数组字段）。
+pub type ColumnList = {
     ok: bool
     err_code: str
     err_detail: str
     columns: []ColumnInfo
+}
+
+/// 表/视图数据页：cells 为行优先扁平化的【值,标志交错】序列
+/// （cells[r*nc*2+c*2]=值，cells[r*nc*2+c*2+1]="1"表示 NULL）；
+/// 列数来自 /api/db/columns。total 为过滤后总数。
+pub type TableData = {
+    ok: bool
+    err_code: str
+    err_detail: str
     cells: []str
-    nulls: []int
     total: int
     page: int
     page_size: int
     showing: int
 }
 
-/// 控制台查询结果：columns 为引擎真实列名；cells/nulls 同 TableData 扁平化；
-/// truncated=true 表示超过 1000 行被显式截断（非承诺上限）。
+/// 索引清单（独立端点，单数组）。
+pub type IndexList = {
+    ok: bool
+    err_code: str
+    err_detail: str
+    indexes: []IndexInfo
+}
+
+/// 表/视图结构信息（无数组字段；列/索引走各自端点）。
+pub type SchemaInfo = {
+    ok: bool
+    err_code: str
+    err_detail: str
+    tname: str
+    ttype: str
+    ddl: str
+}
+
+/// 控制台查询结果：单数组 cells =【列名×ncols】【值,标志 交错×rowcount×ncols】；
+/// ncols 为列数；truncated=true 表示超过 1000 行被显式截断（非承诺上限）。
 pub type QueryResult = {
     ok: bool
     err_code: str
     err_detail: str
-    columns: []str
     cells: []str
-    nulls: []int
+    ncols: int
     rowcount: int
     truncated: bool
 }
@@ -112,22 +135,36 @@ pub fn db_objects(path str) ObjectList {
     return db.list_objects(path)
 }
 
-/// 表/视图数据页（真实 schema 列 + NULL 标志 + 过滤总数）。
+/// 列模型（真实 PRAGMA table_info）。
+/// POST /api/db/columns
+#[api(method = "POST", path = "/api/db/columns")]
+pub fn db_columns(path str, tname str) ColumnList {
+    return db.columns(path, tname)
+}
+
+/// 表/视图数据页（值,标志交错；列模型走 /api/db/columns）。
 /// POST /api/db/table_data
 #[api(method = "POST", path = "/api/db/table_data")]
 pub fn db_table_data(path str, tname str, page int, page_size int, sort_col str, sort_dir str, search str) TableData {
     return db.table_data(path, tname, page, page_size, sort_col, sort_dir, search)
 }
 
-/// 表/视图结构（列/DDL/索引）。
-/// POST /api/db/schema  body: {"path": "...", "tname": "..."}
+/// 表/视图结构信息（DDL 等；无数组字段）。
+/// POST /api/db/schema
 #[api(method = "POST", path = "/api/db/schema")]
-pub fn db_schema(path str, tname str) SchemaResult {
-    return db.table_schema(path, tname)
+pub fn db_schema(path str, tname str) SchemaInfo {
+    return db.schema_info(path, tname)
 }
 
-/// 单条只读查询（SELECT/只读 CTE；真实列名 + NULL 标志 + 显式截断）。
-/// POST /api/db/query  body: {"path": "...", "sql": "..."}
+/// 索引清单。
+/// POST /api/db/indexes
+#[api(method = "POST", path = "/api/db/indexes")]
+pub fn db_indexes(path str, tname str) IndexList {
+    return db.indexes(path, tname)
+}
+
+/// 单条只读查询（cells 单数组：列名头 + 值,标志交错）。
+/// POST /api/db/query
 #[api(method = "POST", path = "/api/db/query")]
 pub fn db_query(path str, sql str) QueryResult {
     return db.run_query(path, sql)

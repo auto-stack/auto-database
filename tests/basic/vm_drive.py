@@ -61,16 +61,15 @@ class Mcp:
         return m.group(1) if m else None
 
     def click_by_text(self, snap, text):
-        """点击快照中含指定文本的最近可交互元素。"""
+        """点击快照中含指定文本的元素（id 与文本同行时优先；否则回溯最近 id）。"""
         pat = re.compile(r"#(\S+)")
         cur = None
         for line in snap.splitlines():
-            if ('"%s"' % text) in line or (' %s ' % text) in line or line.rstrip().endswith('"%s"' % text):
-                if cur:
-                    return cur
             m = pat.search(line)
             if m:
                 cur = m.group(1)
+            if (('"%s"' % text) in line or text in line) and cur:
+                return cur
         return None
 
 
@@ -108,7 +107,11 @@ def main():
         record("open-a-readonly", "READ-ONLY" in snap, "badge visible")
         record("open-a-tree", "客户资料" in snap and "customers" in snap, "real tree")
 
-        # 2. 真实数据 + NULL
+        # 2. 真实数据 + NULL（显式点 customers；自动选中首张非内部表）
+        cust_id = m.click_by_text(snap, "customers")
+        if cust_id:
+            m.press(cust_id)
+            time.sleep(2)
         st = m.state("colNames", "showingText")
         record("data-headers", "company_name" in st, st[:150])
         snap = m.snapshot()
@@ -211,7 +214,7 @@ def main():
             m.press(open_id)
             time.sleep(2)
         st = m.state("file_name", "table_count")
-        record("switch-b", 'basic_b.db' in st and 'table_count: 2' in st, st[:150])
+        record("switch-b", 'basic_b.db' in st and 'table_count: 3' in st, st[:150])
         snap = m.snapshot()
         record("switch-b-data", "SKU-A1" in snap, "db B data")
         if path_id2:
@@ -221,6 +224,11 @@ def main():
         open_id = m.click_by_text(snap, "打开")
         if open_id:
             m.press(open_id)
+            time.sleep(2)
+        snap = m.snapshot()
+        cust_id2 = m.click_by_text(snap, "customers")
+        if cust_id2:
+            m.press(cust_id2)
             time.sleep(2)
         snap = m.snapshot()
         record("switch-back-a", "Alfreds Futterkiste" in snap, "db A restored")

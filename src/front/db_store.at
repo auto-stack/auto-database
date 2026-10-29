@@ -1,0 +1,535 @@
+// front/db_store.at — DATABASE-001 只读浏览 store（契约 v2：单数组响应）。
+//
+// 全部数据来自 /api/db/*（真实 SQLite 文件），无任何内置演示数据（T-04 去模拟化）：
+//   - 打开：路径输入 → db_open（不存在/损坏明确失败，绝不静默成功）；
+//   - 树：db_objects 真实对象（表/视图/索引，含中文标识符）；自动选中首张
+//     非 "__" 前缀表（内部哨兵表靠后）；
+//   - 浏览：db_columns（真实 PRAGMA table_info 列）+ db_table_data（值,标志交错，
+//     NULL 单元格显示为 "NULL"）+ 真分页/排序白名单/搜索；无任何写控件（只读）；
+//   - Schema：db_schema（DDL）+ db_indexes + db_columns；
+//   - SQL：db_query 单条只读查询（守卫拒绝码与引擎错误原文区分呈现）。
+// 视图数据在 handler 内预物化（colNames/vVals/qVals），视图层零算术零索引。
+// 前端 `/` 为浮点除（120.9 会把 422 喂回后端）：页数用纯整数累减取整。
+
+use back.api: db_open, db_objects, db_columns, db_table_data, db_schema, db_indexes, db_query
+use auto.env
+use components.tree_util: filter_tree, collect_ids
+
+store DbStore {
+    model {
+        // —— 连接 ——
+        var path_input str = ""
+        var connected bool = false
+        var db_path str = ""
+        var file_name str = ""
+        var open_err str = ""
+        var open_detail str = ""
+        var table_count int = 0
+        var view_count int = 0
+        var index_count int = 0
+
+        // —— 对象树 ——
+        var objects []ObjInfo = []
+        var dbNodesFull List = []
+        var treeFilter str = ""
+        var dbExpanded List = []
+        var dbSelId str = ""
+
+        // —— 布局 ——
+        var activeTab str = "data"
+
+        // —— 数据浏览 ——
+        var activeTable str = ""
+        var activeType str = "table"
+        var colNames []str = []
+        var vVals List = []      // List<{ vals: List<str> }>，NULL 已渲染为 "NULL"
+        var total int = 0
+        var totalPages int = 1
+        var page int = 1
+        var pageSize int = 10
+        var showingText str = ""
+        var sortCol str = ""
+        var sortDir str = "asc"
+        var searchKw str = ""
+        var data_err str = ""
+
+        // —— Schema 页 ——
+        var schemaTtype str = ""
+        var schemaCols []ColumnInfo = []
+        var schemaDdl str = ""
+        var schemaIdx []str = []
+        var schema_err str = ""
+
+        // —— SQL 控制台 ——
+        var sqlInput str = ""
+        var sqlStatus str = "idle"
+        var sqlErr str = ""
+        var sqlMeta str = ""
+        var qColNames []str = []
+        var qVals List = []      // List<{ vals: List<str> }>
+    }
+
+    msg { Init, PathInput(str), OpenDb, CloseDb, RebuildTree, OpenTable(str), LoadTable, LoadSchema,
+          TreeFilterChanged(str), DbToggle(str), DbSelect(str), SelectTab(str),
+          FirstPage, PrevPage, NextPage, LastPage, SetPageSize10, SetPageSize25, SetPageSize50,
+          SortCol(str), SearchChanged(str), SetSql(str), RunSql, ClearSql,
+          PresetSelect, PresetAgg, PresetCte, PresetReject }
+
+    on {
+        .Init -> { }
+
+        .PathInput(v) -> {
+            .path_input = v
+        }
+
+        .OpenDb -> {
+            .open_err = ""
+            .open_detail = ""
+            var p str = .path_input.trim()
+            if p == "" {
+                .open_err = "empty_path"
+                .connected = false
+            } else {
+                var m FileMeta = db_open(p)
+                if m.ok {
+                    .connected = true
+                    .db_path = p
+                    .file_name = m.name
+                    .table_count = m.tables
+                    .view_count = m.views
+                    .index_count = m.indexes
+                    var l ObjectList = db_objects(p)
+                    if l.ok {
+                        .objects = l.objects
+                        .RebuildTree()
+                        var first str = ""
+                        var fallback str = ""
+                        for o in .objects {
+                            if o.otype == "table" {
+                                if fallback == "" {
+                                    fallback = o.name
+                                }
+                                if first == "" {
+                                    if !o.name.starts_with("__") {
+                                        first = o.name
+                                    }
+                                }
+                            }
+                        }
+                        if first == "" {
+                            first = fallback
+                        }
+                        // VM 诊断门（临时）
+                        if env.get("AUTO_DB_VM_DIAG") == "skip_select" {
+                            .activeTable = ""
+                        } else {
+                        if first != "" {
+                            .DbSelect("t/" + first)
+                        } else {
+                            .activeTable = ""
+                            .colNames = []
+                            .vVals = []
+                            .total = 0
+                            .totalPages = 1
+                            .showingText = ""
+                        }
+                        }
+                    } else {
+                        .objects = []
+                        .dbNodesFull = []
+                        .open_err = l.err_code
+                        .open_detail = l.err_detail
+                    }
+                } else {
+                    .connected = false
+                    .db_path = ""
+                    .file_name = ""
+                    .open_err = m.err_code
+                    .open_detail = m.err_detail
+                    .objects = []
+                    .dbNodesFull = []
+                    .colNames = []
+                    .vVals = []
+                    .total = 0
+                    .totalPages = 1
+                    .showingText = ""
+                }
+            }
+        }
+
+        .CloseDb -> {
+            .connected = false
+            .db_path = ""
+            .file_name = ""
+            .objects = []
+            .dbNodesFull = []
+            .dbSelId = ""
+            .colNames = []
+            .vVals = []
+            .total = 0
+            .totalPages = 1
+            .showingText = ""
+            .activeTable = ""
+            .schemaCols = []
+            .schemaDdl = ""
+            .schemaIdx = []
+            .sqlStatus = "idle"
+            .sqlErr = ""
+            .sqlMeta = ""
+            .qColNames = []
+            .qVals = []
+            .open_err = ""
+            .open_detail = ""
+        }
+
+        .RebuildTree -> {
+            var tlist List = []
+            var vlist List = []
+            var ilist List = []
+            for o in .objects {
+                if o.otype == "table" {
+                    tlist.push({ id: "t/" + o.name, label: o.name, kind: "file", icon: "table", is_leaf: true, badge: "", children: [] })
+                } else {
+                    if o.otype == "view" {
+                        vlist.push({ id: "v/" + o.name, label: o.name, kind: "file", icon: "eye", is_leaf: true, badge: "", children: [] })
+                    } else {
+                        if o.otype == "index" {
+                            ilist.push({ id: "i/" + o.name, label: o.name, kind: "file", icon: "zap", is_leaf: true, badge: "", children: [] })
+                        }
+                    }
+                }
+            }
+            var groups List = []
+            if tlist.len() > 0 {
+                groups.push({ id: "g/tables", label: "Tables", kind: "dir", icon: "table", is_leaf: false, badge: f"${.table_count}", children: tlist })
+            }
+            if vlist.len() > 0 {
+                groups.push({ id: "g/views", label: "Views", kind: "dir", icon: "eye", is_leaf: false, badge: f"${.view_count}", children: vlist })
+            }
+            if ilist.len() > 0 {
+                groups.push({ id: "g/indexes", label: "Indexes", kind: "dir", icon: "zap", is_leaf: false, badge: f"${.index_count}", children: ilist })
+            }
+            var rootList List = []
+            rootList.push({ id: "db/app", label: .file_name + " (SQLite)", kind: "dir", icon: "", is_leaf: false, badge: "", children: groups })
+            .dbNodesFull = rootList
+            .dbExpanded = ["db/app", "g/tables", "g/views", "g/indexes"]
+        }
+
+        .DbToggle(id) -> {
+            .dbExpanded = toggle_id(.dbExpanded, id)
+        }
+
+        .DbSelect(id) -> {
+            .dbSelId = id
+            if id.starts_with("t/") {
+                .activeType = "table"
+                .activeTab = "data"
+                .OpenTable(id.sub(2, id.len()))
+            } else {
+                if id.starts_with("v/") {
+                    .activeType = "view"
+                    .activeTab = "data"
+                    .OpenTable(id.sub(2, id.len()))
+                } else {
+                    if id.starts_with("i/") {
+                        .activeType = "index"
+                        .activeTab = "schema"
+                        .OpenTable(id.sub(2, id.len()))
+                    }
+                }
+            }
+        }
+
+        .OpenTable(t) -> {
+            .activeTable = t
+            .page = 1
+            .sortCol = ""
+            .sortDir = "asc"
+            .searchKw = ""
+            .LoadTable()
+            .LoadSchema()
+        }
+
+        .LoadTable -> {
+            if env.get("AUTO_DB_VM_DIAG") == "skip_table" {
+                .connected = true
+            } else {
+            if .db_path != "" {
+            var cl ColumnList = db_columns(.db_path, .activeTable)
+            if !cl.ok {
+                .colNames = []
+                .vVals = []
+                .total = 0
+                .totalPages = 1
+                .showingText = ""
+                .data_err = cl.err_code + ": " + cl.err_detail
+            } else {
+                var labels []str = []
+                var ci int = 0
+                while ci < cl.columns.len() {
+                    var c = cl.columns[ci]
+                    var label str = c.name
+                    if .sortCol == c.name {
+                        if .sortDir == "asc" {
+                            label = label + " ↑"
+                        } else {
+                            label = label + " ↓"
+                        }
+                    }
+                    labels.push(label)
+                    ci = ci + 1
+                }
+                .colNames = labels
+                var nc int = cl.columns.len()
+                var r TableData = db_table_data(.db_path, .activeTable, .page, .pageSize, .sortCol, .sortDir, .searchKw)
+                if r.ok {
+                    var rowsL List = []
+                    var ri int = 0
+                    while ri < r.showing {
+                        var rowL List = []
+                        var k int = 0
+                        while k < nc {
+                            var idx int = (ri * nc + k) * 2
+                            if r.cells[idx + 1] == "1" {
+                                rowL.push("NULL")
+                            } else {
+                                rowL.push(r.cells[idx])
+                            }
+                            k = k + 1
+                        }
+                        rowsL.push({ vals: rowL })
+                        ri = ri + 1
+                    }
+                    .vVals = rowsL
+                    .total = r.total
+                    // 前端 `/` 为浮点除（120.9 会把 422 喂回后端）：纯整数累减取整
+                    var tp int = 0
+                    var rem int = r.total
+                    while rem > 0 {
+                        tp = tp + 1
+                        rem = rem - .pageSize
+                    }
+                    if tp < 1 {
+                        tp = 1
+                    }
+                    .totalPages = tp
+                    var start1 int = (.page - 1) * .pageSize + 1
+                    var end1 int = (.page - 1) * .pageSize + r.showing
+                    .showingText = f"Showing ${start1} - ${end1} of ${.total} rows"
+                    .data_err = ""
+                } else {
+                    .vVals = []
+                    .total = 0
+                    .totalPages = 1
+                    .showingText = ""
+                    .data_err = r.err_code + ": " + r.err_detail
+                }
+            }
+            }
+            }
+        }
+
+        .LoadSchema -> {
+            if env.get("AUTO_DB_VM_DIAG") == "skip_schema" {
+                .connected = true
+            } else {
+            if .db_path != "" {
+            if .db_path != "" {
+            var si SchemaInfo = db_schema(.db_path, .activeTable)
+            if si.ok {
+                .schemaTtype = si.ttype
+                .schemaDdl = si.ddl
+                .schema_err = ""
+            } else {
+                .schemaTtype = ""
+                .schemaDdl = ""
+                .schema_err = si.err_code + ": " + si.err_detail
+            }
+            var il IndexList = db_indexes(.db_path, .activeTable)
+            if il.ok {
+                var names []str = []
+                var i int = 0
+                while i < il.indexes.len() {
+                    var ix = il.indexes[i]
+                    var line str = ix.name + " — (" + ix.cols + ")"
+                    if ix.unique {
+                        line = line + " UNIQUE"
+                    }
+                    names.push(line)
+                    i = i + 1
+                }
+                .schemaIdx = names
+            } else {
+                .schemaIdx = []
+            }
+            var sc2 ColumnList = db_columns(.db_path, .activeTable)
+            if sc2.ok {
+                .schemaCols = sc2.columns
+            } else {
+                .schemaCols = []
+            }
+            }
+            }
+        }
+
+        .TreeFilterChanged(kw) -> {
+            .treeFilter = kw
+            .dbExpanded = collect_ids(filter_tree(.dbNodesFull, kw), false)
+        }
+
+        .SelectTab(tab) -> {
+            .activeTab = tab
+        }
+
+        .FirstPage -> {
+            .page = 1
+            .LoadTable()
+        }
+
+        .PrevPage -> {
+            if .page > 1 {
+                .page = .page - 1
+                .LoadTable()
+            }
+        }
+
+        .NextPage -> {
+            if .page < .totalPages {
+                .page = .page + 1
+                .LoadTable()
+            }
+        }
+
+        .LastPage -> {
+            .page = .totalPages
+            .LoadTable()
+        }
+
+        .SetPageSize10 -> {
+            .pageSize = 10
+            .page = 1
+            .LoadTable()
+        }
+
+        .SetPageSize25 -> {
+            .pageSize = 25
+            .page = 1
+            .LoadTable()
+        }
+
+        .SetPageSize50 -> {
+            .pageSize = 50
+            .page = 1
+            .LoadTable()
+        }
+
+        .SortCol(c) -> {
+            var base str = c.replace(" ↑", "").replace(" ↓", "")
+            if .sortCol == base {
+                if .sortDir == "asc" {
+                    .sortDir = "desc"
+                } else {
+                    .sortDir = "asc"
+                }
+            } else {
+                .sortCol = base
+                .sortDir = "asc"
+            }
+            .page = 1
+            .LoadTable()
+        }
+
+        .SearchChanged(kw) -> {
+            .searchKw = kw
+            .page = 1
+            .LoadTable()
+        }
+
+        .SetSql(q) -> {
+            .sqlInput = q
+        }
+
+        .RunSql -> {
+            if .db_path == "" {
+                .sqlStatus = "error"
+                .sqlErr = "未打开数据库"
+            } else {
+            var r QueryResult = db_query(.db_path, .sqlInput)
+            if r.ok {
+                var nc int = r.ncols
+                var heads []str = []
+                var h int = 0
+                while h < nc {
+                    heads.push(r.cells[h])
+                    h = h + 1
+                }
+                .qColNames = heads
+                var rowsL List = []
+                var ri int = 0
+                while ri < r.rowcount {
+                    var rowL List = []
+                    var k int = 0
+                    while k < nc {
+                        var idx int = nc + (ri * nc + k) * 2
+                        if r.cells[idx + 1] == "1" {
+                            rowL.push("NULL")
+                        } else {
+                            rowL.push(r.cells[idx])
+                        }
+                        k = k + 1
+                    }
+                    rowsL.push({ vals: rowL })
+                    ri = ri + 1
+                }
+                .qVals = rowsL
+                if r.truncated {
+                    .sqlMeta = f"${r.rowcount} rows · 已截断（前 1000 行）"
+                } else {
+                    .sqlMeta = f"${r.rowcount} rows"
+                }
+                .sqlStatus = "success"
+                .sqlErr = ""
+            } else {
+                .qColNames = []
+                .qVals = []
+                .sqlMeta = ""
+                if r.err_code == "rejected" {
+                    .sqlErr = "已拒绝（只读守卫）： " + r.err_detail
+                } else {
+                    .sqlErr = r.err_detail
+                }
+                .sqlStatus = "error"
+            }
+            }
+        }
+
+        .ClearSql -> {
+            .sqlInput = ""
+            .sqlStatus = "idle"
+            .sqlErr = ""
+            .sqlMeta = ""
+            .qColNames = []
+            .qVals = []
+        }
+
+        .PresetSelect -> {
+            .sqlInput = "SELECT * FROM " + .activeTable + " LIMIT 20"
+            .sqlStatus = "idle"
+        }
+
+        .PresetAgg -> {
+            .sqlInput = "SELECT country, COUNT(*) AS n FROM customers GROUP BY country ORDER BY n DESC"
+            .sqlStatus = "idle"
+        }
+
+        .PresetCte -> {
+            .sqlInput = "WITH c AS (SELECT id, company_name FROM customers WHERE id <= 5) SELECT * FROM c"
+            .sqlStatus = "idle"
+        }
+
+        .PresetReject -> {
+            .sqlInput = "DELETE FROM customers"
+            .sqlStatus = "idle"
+        }
+    }
+}
