@@ -1,12 +1,12 @@
 ---
 plan_id: DATABASE-001
-status: drafting
+status: reviewed
 feature_name: real-sqlite-browser
 author: [Codex]
 created_at: 2026-10-29
-updated_at: 2026-10-29
+updated_at: 2026-10-30
 plan_revision: 2
-current_step: 5
+current_step: 6
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/database/basic-capabilities.md]
@@ -107,13 +107,13 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 
 - [x] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：有界核查现有 Auto SQLite 的打开失败、只读连接、单语句/只读判定、动态结果/NULL、资源关闭和取消/分页；固定版本和前置归属。已读源码 D:/autostack/auto-lang/crates/a2r-std/src/sqlite.rs、crates/auto-lang-core/src/vm/ffi/stdlib/sqlite.rs 只是调查入口，禁止 app 手写 Rust 或仅检查 open 句柄非空。若接口缺失，登记 SDK 前置并阻塞依赖任务。若需后端，17839 为候选。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
   [✅ 已完成 2026-10-29] 探针实证 9 项（P1..P9，`/api/probe/*`，AUTO_DB_PROBE 隔离目录）；输出 `docs/plans/evidence/001/capability-decision.md`（冻结只读协议 v1：exists 预检→query_only=ON→关键字守卫→哈希 oracle 三层；describe+wrap 列名/NULL 协议；金丝雀错误隔离）。原始输出 `docs/plans/attachments/001/t01-probe-outputs.txt`（sha256 bde999ee…c42e，local-only）。关键实证：open 静默建文件→必须 exists 预检；query_only 引擎级拦截全部写（含 VACUUM/attached 写）；经 query() 翻转 query_only 后写穿透→守卫必须拦 pragma/attach；多语句仅首条执行；describe-view+派生表包装取得真实列名与 NULL 标志（CTE/聚合/中文/重复列名 id:1 全通过）；last_error 进程级全局陈旧→金丝雀协议（G-1 登记，不阻塞）。无 SDK 前置阻塞项；pac.at 增 `api:"rust"`+`back_port:17839`；新增 `src/back/probe.at`、`src/back/api.at`（探针端点）、`tests/basic/fixtures/make_fixtures.py`。
-- [ ] T-02（owner_stage=work；依赖 T-01；AC-01..04）：真实数据接缝：新增 src/back/sqlite_service.at / api.at（拟议），接经 T-01 证实的只读 provider；连接关闭/切库释放资源，错误与内存 fixture 明确区分。
+- [x] T-02（owner_stage=work；依赖 T-01；AC-01..04）：真实数据接缝：新增 src/back/sqlite_service.at / api.at（拟议），接经 T-01 证实的只读 provider；连接关闭/切库释放资源，错误与内存 fixture 明确区分。
   [✅ 已完成 2026-10-29，提交 73bf2ad+1cbd0ee] src/back/db.at + api.at（计划拟名 sqlite_service.at 因生成器单 db 层约定落为 db.at）；无跨请求连接状态（每请求 RAII 开关，V-04 以请求间隙文件可重命名观测）；错误与损坏明确区分（file_not_found/not_a_database/rejected/query_failed）。
-- [ ] T-03（owner_stage=work；依赖 T-02；AC-01..04）：Schema与真实查询：实现实际表/schema读取及查询结果模型，行数/列名/NULL来自引擎；确定分页或显式截断预算，超过预算有真实状态。
+- [x] T-03（owner_stage=work；依赖 T-02；AC-01..04）：Schema与真实查询：实现实际表/schema读取及查询结果模型，行数/列名/NULL来自引擎；确定分页或显式截断预算，超过预算有真实状态。
   [✅ 已完成 2026-10-29，提交 73bf2ad+4bea470+1cbd0ee] 列/行/NULL 全部来自引擎（PRAGMA table_info/sqlite_master/查询包装标志）；分页 10/25/50（≤200 上限）、控制台 >1000 行显式截断 truncated=true；oracle 比对 37/37（verify_basic.py --api-only，含中文表/NULL/CTE/聚合/搜索/排序）。
-- [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面去模拟化：现有对象树/结果表/SQL输入接真数据；去掉模拟事务和写入成功提示，不可用写控件隐藏或明确禁用；显示文件身份和只读状态。
+- [x] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面去模拟化：现有对象树/结果表/SQL输入接真数据；去掉模拟事务和写入成功提示，不可用写控件隐藏或明确禁用；显示文件身份和只读状态。
   [✅ 已完成 2026-10-29，提交 1cbd0ee] app.at 全部接真数据（db_store.at），演示数据/模拟事务/假排序/关键字 RunSql 全部移除，写控件不存在；READ-ONLY 徽标+文件名+真实对象计数显示；Vue 端 Playwright 21/21（打开→树→浏览/搜索/NULL/分页→中文 Schema→SQL 成功/拒绝/引擎错误→切库往返，零页面错误）。
-- [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
+- [x] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
   [✅ 已完成 2026-10-30，提交 1cbd0ee+本轮] verify_basic.py（api 37/37，oracle 比对）+ ui_drive.mjs（Vue 21/21，真实浏览器全链路）+ vm 端：注入式电池在本机不可靠（G-7），改用 tests/basic/tools/vm_e2e_hook.py 确定性钩子实测通过（open:basic_a.db/4 q:success/3 rows rej:error b:basic_b.db/3 back:basic_a.db，经 autoui_state 读取）；canonical Spec 已落地 docs/specs/database/basic-capabilities.md。AC-01..04 全部有实测证据。
 - [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
 - [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
@@ -123,6 +123,7 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - 历史 r1起草回执见 `fda99313674c4e57ab2953ae84c597b3480900f3`；其开发位置/收尾状态描述由本次修订替代，既有功能与验收合同保留。
 - stage: work | plan_id: DATABASE-001 | plan_revision: 2 | outcome: pass（execution_done） | worktree: D:/autostack/auto-database（独立 clone，main） | branch: main | base_commit: 55c4ece | code_commit: 至本轮提交 | dependency_revisions: auto-lang 工作区当前源（rusqlite bundled）、auto-man CLI v0.0.20-117、auto-ui 当前源 | task_ids: T-01..T-05 | evidence: api 电池 37/37（verify_basic.py --api-only，独立 sqlite3 oracle）；Vue Playwright 21/21（--profile vue）；VM 确定性链路通过（vm_e2e_hook + autoui_state，open/查询/写拒绝/切库/切回全对）；capability-decision §5 与 G-4..G-7 | blockers: 无 | next_responsible_role: review（T-06 最终复审，冻结当前提交）
 - 本轮为 goal 会话连续执行：T-01 探针冻结只读协议 → T-02/03 后端与契约 v2（G-5 多数组解码边界）→ T-04 前端去模拟化（G-6 Init 转发修复）→ T-05 三层验收落地。提交链：f0f3791 → 73bf2ad → 4bea470 → 1cbd0ee → 0c4d7c9 → 本轮。
+- stage: review | review_scope: final | reviewer_identity: 独立复审 agent 上下文（与实现者不同会话；实现写入已暂停） | plan_id: DATABASE-001 | plan_revision: 2 | outcome: pass（reviewed） | worktree_path: D:/autostack/auto-database | branch: main | reviewed_commit: 16de98c | base_commit: 55c4ece | dependency_revisions: auto CLI 0.1.0+v0.0.20-118（较登记 -117 漂移一版，全部复跑在其上通过，F-6）、auto-lang 工作区 da710c80d | spec_inputs: docs/specs/database/basic-capabilities.md（已备未发布）+ capability-decision.md | acceptance_results: AC-01 pass / AC-02 pass / AC-03 pass / AC-04 pass（VM 分支为记录级，见局限）/ AC-05 pass（本次复审即执行）/ AC-06 未在范围 | pending_closeout_gates: 本仓无统一回归门要求（验证即 verify_basic 电池，已全绿）；推送/父仓 pin/总表刷新归 T-07 | findings: F-1 计划元数据滞后（本次随回执修正）；F-2 纵深防御深度较冻结文本收敛（4 关键字+首token，引擎层兜底实证不变式成立，Spec 表述准确，接受）；F-3 守卫注释与 char_at 越界语义描述不符（low，merge 时顺手改注释，不改代码语义）；F-4 Spec §4 VM 证据来源表述待精确（merge 沉淀 Spec 时修正）；F-5 UI 电池原始 stdout 未归档（info）；F-6 CLI 版本漂移（info，强化） | evidence: 复审人亲手重跑 verify_basic --api-only ×2（37/37，退出码 0）、--profile vue（39/39，Playwright 21 项零页面错误）、自建 21 项守卫边界反例（全部符合预期且服务存活）；API/源码/Spec 交叉核对无范围缩水 | limitations: VM 链路未由复审人重跑（复现需临时改写 store，与只读复审纪律冲突；依据落盘记录+钩子工具源码评估+代码/夹具交叉一致）；UI 原始日志未归档（F-5） | next: merge（T-07）
 - stage: new | plan_id: DATABASE-001 | plan_revision: 2 | outcome: pass（独立clone路径修订就绪；功能未实施/未验收） | next: work/T-01（另行执行）。
 - 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。
