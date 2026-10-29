@@ -1,0 +1,164 @@
+{
+  "project": "auto-database",
+  "version": 1,
+  "sections": [
+    {
+      "id": "goals",
+      "section_type": "Goals",
+      "title": "🎯 Goals",
+      "items": [],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    },
+    {
+      "id": "architecture",
+      "section_type": "Architecture",
+      "title": "🏗️ Architecture",
+      "items": [],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    },
+    {
+      "id": "designs",
+      "section_type": "Designs",
+      "title": "🎨 Designs",
+      "items": [
+        {
+          "id": "DATABASE-001-readonly-browser-contract",
+          "title": "database 只读 SQLite 浏览基本能力合同（DATABASE-001）",
+          "content": "用户输入本机 SQLite 文件路径→真实身份（文件名+表/视图/索引计数）；对象树/列模型/行/NULL 全部来自引擎（sqlite_master + PRAGMA table_info + 查询包装 NULL 标志，NULL 显示为 NULL 文本）；分页 10/25/50（≤200）、排序白名单、全列 LIKE ESCAPE 搜索；控制台单条只读 SELECT/只读 CTE，>1000 行显式截断。只读三层：①守卫（单语句+首token∈{SELECT,WITH}+禁 pragma/attach/detach/load_extension）②每连接 PRAGMA query_only=ON ③验收 sha256/哨兵 oracle。每请求 open→RAII 关闭，无跨请求连接状态。错误合同：empty_path/file_not_found（绝不建文件）/not_a_database/readonly_setup_failed/rejected(<原因>)/query_failed(引擎原文)。docs/specs/database/basic-capabilities.md @510ddab5 [plan:DATABASE-001 @10a5205]",
+          "status": "implemented",
+          "depends_on": [],
+          "related": [],
+          "priority": null,
+          "assignee": null,
+          "test_file": null,
+          "file": "docs/specs/database/basic-capabilities.md",
+          "milestone": null,
+          "module": "database",
+          "tags": [
+            "plan:DATABASE-001",
+            "commit:10a5205",
+            "sha256:510ddab5"
+          ],
+          "created_at": 1793306843,
+          "modified_at": 1793306843,
+          "completed_at": 1793306843
+        }
+      ],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    },
+    {
+      "id": "tests",
+      "section_type": "Tests",
+      "title": "🧪 Tests",
+      "items": [
+        {
+          "id": "DATABASE-001-verify-basic",
+          "title": "database 基本能力验收电池（verify_basic.py）",
+          "content": "三层可复现入口：--api-only（37 检查，独立 Python sqlite3 oracle 逐值比对：表/列/行/NULL/中文/CTE/聚合/搜索/排序 + 失败路径无副作用 + 全部写拒绝 + sha256 不变 + 句柄释放）；--profile vue（Playwright 21 项真实浏览器全链路）；--profile vm（注入式 21 项；高负载环境的确定性替代：tests/basic/tools/vm_e2e_hook.py Init 自驱链 + autoui_state 读取）。夹具：tests/basic/fixtures/make_fixtures.py。docs/specs/database/basic-capabilities.md @510ddab5 [plan:DATABASE-001 @10a5205]",
+          "status": "implemented",
+          "depends_on": [],
+          "related": [],
+          "priority": null,
+          "assignee": null,
+          "test_file": null,
+          "file": "tests/basic/verify_basic.py",
+          "milestone": null,
+          "module": "database",
+          "tags": [
+            "plan:DATABASE-001",
+            "commit:10a5205",
+            "kind:verification"
+          ],
+          "created_at": 1793306843,
+          "modified_at": 1793306843,
+          "completed_at": 1793306843
+        }
+      ],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    },
+    {
+      "id": "reviews",
+      "section_type": "Reviews",
+      "title": "🔍 Reviews",
+      "items": [
+        {
+          "id": "DATABASE-001-review",
+          "title": "DATABASE-001 review pass（r2）",
+          "content": "独立复审 agent 上下文 final pass（reviewed 16de98c → 合并 10a5205，2026-10-30）：复审人亲手重跑 api 电池 37/37 ×2、Vue Playwright 21/21（零页面错误）、自建 21 项守卫边界反例（全部符合预期且服务存活）；AC-01..05 pass，AC-06 归 merge。findings F-1..F-6 全 low/info（计划元数据/防御深度收敛/注释精度/Spec 措辞/日志归档/CLI 漂移 -118），F-3/F-4 已在合并提交修正。VM 链路证据为 Init 钩子确定性执行 （open:basic_a.db/4 q:success/3 rows rej:error b:basic_b.db/3 back:basic_a.db）。docs/specs/database/basic-capabilities.md @510ddab5 [plan:DATABASE-001 @10a5205]",
+          "status": "implemented",
+          "depends_on": [],
+          "related": [],
+          "priority": null,
+          "assignee": null,
+          "test_file": null,
+          "file": "docs/plans/archived/001-real-sqlite-browser.md",
+          "milestone": null,
+          "module": "database",
+          "tags": [
+            "plan:DATABASE-001",
+            "commit:10a5205",
+            "verdict:pass"
+          ],
+          "created_at": 1793306843,
+          "modified_at": 1793306843,
+          "completed_at": 1793306843
+        }
+      ],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    },
+    {
+      "id": "reports",
+      "section_type": "Reports",
+      "title": "📊 Reports",
+      "items": [
+        {
+          "id": "DATABASE-001-deposit",
+          "title": "DATABASE-001 交付存档（真实只读 SQLite 浏览器）",
+          "content": "预置表+字符串模拟 SQL 替换为真实 SQLite 只读浏览器：后端 db.at/api.at（rust 服务，17839），前端 db_store/app.at（去全部模拟数据与写控件）；发现并规避发射器/客户端边界 G-4..G-7（sub 字节语义、多数组响应解码、store.Init 需显式转发、VM 前端无 env 通道）；验收 api 37/37 + vue 21/21 + vm 链路确定性通过。证据：docs/plans/archived/001-real-sqlite-browser.md §9。 [plan:DATABASE-001 @10a5205]",
+          "status": "implemented",
+          "depends_on": [],
+          "related": [],
+          "priority": null,
+          "assignee": null,
+          "test_file": null,
+          "file": "docs/plans/archived/001-real-sqlite-browser.md",
+          "milestone": null,
+          "module": "database",
+          "tags": [
+            "plan:DATABASE-001",
+            "commit:10a5205",
+            "kind:deposit"
+          ],
+          "created_at": 1793306843,
+          "modified_at": 1793306843,
+          "completed_at": 1793306843
+        }
+      ],
+      "status": "draft",
+      "content": "",
+      "depends_on": [],
+      "last_modified": 1793306843,
+      "last_verified": null
+    }
+  ]
+}
