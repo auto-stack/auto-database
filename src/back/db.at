@@ -1,0 +1,815 @@
+// back/db.at — DATABASE-001 只读 SQLite 数据层（T-02/T-03）。
+// 生成器约定：所有 #[api] 端点经 db 层薄委托（probe 端点同样经此转发）。
+//
+// 能力合同：docs/plans/evidence/001/capability-decision.md（T-01 冻结协议 v1）。
+// 无跨请求连接状态：每个请求 open→用→RAII 关闭（句柄生命周期可观测，AC-04）。
+// 只读三层：①guard_sql 单语句+首token+旁路关键字守卫 ②PRAGMA query_only=ON
+// 引擎强制 ③验收哈希 oracle（V-03）。任意 SELECT 的真实列名与 NULL 标志经
+// describe-view + 派生表包装协议取得（P7 实证）。
+// 错误隔离：a2r last_error 为进程级全局且成功不清空（G-1）——金丝雀对比判定。
+//
+// 发射器边界（已实测登记，capability-decision §3）：SqliteDb 不得进入用户
+// struct（E0405）；fs.size/fs.filename 无发射映射（E0423）——文件名由
+// base_name 自算，字节数不上报（宁缺勿假）。
+
+use auto.json
+use auto.sqlite
+use api: FileMeta, ObjInfo, ObjectList, ColumnInfo, IndexInfo, SchemaResult, TableData, QueryResult
+use probe
+
+// ═══════════════════════════════════════════════════════════
+// 基础助手
+// ═══════════════════════════════════════════════════════════
+
+/// SQL 字符串字面量：单引号包裹 + 内部 ' 翻倍。
+fn sq(s str) str {
+    return "'" + s.replace("'", "''") + "'"
+}
+
+/// SQL 标识符：[方括号] 引用 + 内部 ] 翻倍（bundled SQLite 方括号方言）。
+fn ident(s str) str {
+    return "[" + s.replace("]", "]]") + "]"
+}
+
+/// LIKE 模式转义：\ % _ 前置反斜杠（配 ESCAPE '\' 使用）。
+fn like_pattern(kw str) str {
+    var t str = kw.replace("\\", "\\\\")
+    t = t.replace("%", "\\%")
+    t = t.replace("_", "\\_")
+    return "%" + t + "%"
+}
+
+/// 路径末段文件名（发射器无 fs.filename 映射、str.reverse 不可用；自算，
+/// / 与 \ 都处理，自末尾向前扫）。
+fn base_name(p str) str {
+    var n int = p.len()
+    var i int = n - 1
+    var k int = -1
+    while i >= 0 {
+        var c str = p.sub(i, i + 1)
+        if c == "/" {
+            k = i
+            i = -1
+        } else {
+            if c == "\\" {
+                k = i
+                i = -1
+            } else {
+                i = i - 1
+            }
+        }
+    }
+    if k < 0 {
+        return p
+    }
+    return p.sub(k + 1, n)
+}
+
+/// 金丝雀：跑一个必然语法失败的查询，把全局 last_error 置为已知文本并返回，
+/// 作为操作前基线（操作后再取：文本变化 ⇔ 本次操作失败，且新文本即错误详情）。
+fn canary(db SqliteDb) str {
+    var _r List<List<str>> = db.query("SELECT 'canary-no-such-syntax-42")
+    return sqlite.last_error()
+}
+
+/// 打开后验证（读路径共用）：sqlite_master 试读 + query_only=ON。
+/// 返回 ""=通过；否则 "code\tdetail"（code ∈ not_a_database | readonly_setup_failed）。
+fn open_verify(db SqliteDb) str {
+    var base str = canary(db)
+    var probe List<List<str>> = db.query("SELECT COUNT(*) FROM sqlite_master")
+    if probe.len() != 1 {
+        var d str = sqlite.last_error()
+        if d == base {
+            d = "sqlite_master unreadable"
+        }
+        return "not_a_database\t" + d
+    }
+    var qo int = db.exec("PRAGMA query_only=ON")
+    if qo < 0 {
+        return "readonly_setup_failed\t" + sqlite.last_error()
+    }
+    return ""
+}
+
+/// 首个 "\t" 位置（str.find 与发射器签名漂移不可用；自扫）。
+fn tab_pos(v str) int {
+    var i int = 0
+    while i < v.len() {
+        if v.sub(i, i + 1) == "\t" {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+/// "code\tdetail" → code（无 \t 时原样）。
+fn err_code_of(v str) str {
+    var p int = tab_pos(v)
+    if p < 0 {
+        return v
+    }
+    return v.sub(0, p)
+}
+
+/// "code\tdetail" → detail。
+fn err_detail_of(v str) str {
+    var p int = tab_pos(v)
+    if p < 0 {
+        return ""
+    }
+    return v.sub(p + 1, v.len())
+}
+
+/// 打开前的路径判定（各 pub fn 共用）：空→"empty_path"；不存在→
+/// "file_not_found"（绝不 open——open 会静默建文件，P1）；否则 ""。
+fn precheck(path str) str {
+    var clean str = path.trim()
+    if clean == "" {
+        return "empty_path"
+    }
+    if !fs.exists(clean) {
+        return "file_not_found"
+    }
+    return ""
+}
+
+// ═══════════════════════════════════════════════════════════
+// 守卫（只读层①）：单条语句 + 首 token ∈ {select, with} +
+// 普通上下文无 pragma/attach/detach/load_extension。
+// 引号/注释感知：'str'（'' 转义）、"ident"、[ident]（]] 转义）、`ident`、
+// -- 行注释、/* 块注释。非 ASCII 永不构成关键字（按分隔符处理，无害）。
+// ═══════════════════════════════════════════════════════════
+
+fn is_ident_char(c str) bool {
+    return "abcdefghijklmnopqrstuvwxyz0123456789_$".contains(c)
+}
+
+/// 返回 ""=通过；否则拒绝码：empty_statement | multi_statement | not_readonly
+/// | forbidden_keyword:<tok>。
+fn guard_sql(sql str) str {
+    var t str = sql.trim().lower()
+    if t == "" {
+        return "empty_statement"
+    }
+    var n int = t.len()
+    var i int = 0
+    var stmts int = 1
+    var ctx int = 0 // 0=normal 1='str 2="ident 3=[ident] 4=`ident` 5=--line 6=/*block*/
+    var tok str = ""
+    var first_tok str = ""
+    var forbidden str = ""
+    while i < n {
+        var c str = t.sub(i, i + 1)
+        if ctx == 1 {
+            if c == "'" {
+                if t.sub(i + 1, i + 2) == "'" {
+                    i = i + 2
+                } else {
+                    ctx = 0
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            if ctx == 2 {
+                if c == "\"" {
+                    ctx = 0
+                }
+                i = i + 1
+            } else {
+                if ctx == 3 {
+                    if c == "]" {
+                        if t.sub(i + 1, i + 2) == "]" {
+                            i = i + 2
+                        } else {
+                            ctx = 0
+                            i = i + 1
+                        }
+                    } else {
+                        i = i + 1
+                    }
+                } else {
+                    if ctx == 4 {
+                        if c == "`" {
+                            ctx = 0
+                        }
+                        i = i + 1
+                    } else {
+                        if ctx == 5 {
+                            if c == "\n" {
+                                ctx = 0
+                            }
+                            i = i + 1
+                        } else {
+                            if ctx == 6 {
+                                if c == "/" {
+                                    if t.sub(i - 1, i) == "*" {
+                                        ctx = 0
+                                    }
+                                }
+                                i = i + 1
+                            } else {
+                                // ── 普通上下文 ──
+                                if is_ident_char(c) {
+                                    tok = tok + c
+                                    i = i + 1
+                                } else {
+                                    if tok != "" {
+                                        if first_tok == "" {
+                                            first_tok = tok
+                                        }
+                                        if tok == "pragma" {
+                                            forbidden = "pragma"
+                                        }
+                                        if tok == "attach" {
+                                            forbidden = "attach"
+                                        }
+                                        if tok == "detach" {
+                                            forbidden = "detach"
+                                        }
+                                        if tok == "load_extension" {
+                                            forbidden = "load_extension"
+                                        }
+                                        tok = ""
+                                    }
+                                    if c == "'" {
+                                        ctx = 1
+                                        i = i + 1
+                                    } else {
+                                        if c == "\"" {
+                                            ctx = 2
+                                            i = i + 1
+                                        } else {
+                                            if c == "[" {
+                                                ctx = 3
+                                                i = i + 1
+                                            } else {
+                                                if c == "`" {
+                                                    ctx = 4
+                                                    i = i + 1
+                                                } else {
+                                                    if c == "-" {
+                                                        if t.sub(i + 1, i + 2) == "-" {
+                                                            ctx = 5
+                                                            i = i + 2
+                                                        } else {
+                                                            i = i + 1
+                                                        }
+                                                    } else {
+                                                        if c == "/" {
+                                                            if t.sub(i + 1, i + 2) == "*" {
+                                                                ctx = 6
+                                                                i = i + 2
+                                                            } else {
+                                                                i = i + 1
+                                                            }
+                                                        } else {
+                                                            if c == ";" {
+                                                                stmts = stmts + 1
+                                                                i = i + 1
+                                                            } else {
+                                                                i = i + 1
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if tok != "" {
+        if first_tok == "" {
+            first_tok = tok
+        }
+        if tok == "pragma" {
+            forbidden = "pragma"
+        }
+        if tok == "attach" {
+            forbidden = "attach"
+        }
+        if tok == "detach" {
+            forbidden = "detach"
+        }
+        if tok == "load_extension" {
+            forbidden = "load_extension"
+        }
+    }
+    if forbidden != "" {
+        return "forbidden_keyword:" + forbidden
+    }
+    if stmts > 1 {
+        return "multi_statement"
+    }
+    if first_tok != "select" {
+        if first_tok != "with" {
+            return "not_readonly"
+        }
+    }
+    return ""
+}
+
+// ═══════════════════════════════════════════════════════════
+// API 主体：open / objects / table_data / schema / query
+// ═══════════════════════════════════════════════════════════
+
+/// 打开文件：返回身份与对象计数；绝不成功于不存在/损坏文件。
+pub fn open_db(path str) FileMeta {
+    var m FileMeta = FileMeta { ok: false, err_code: "", err_detail: "", path: "", name: "",
+        tables: 0, views: 0, indexes: 0 }
+    m.path = path + ""
+    var pre str = precheck(path)
+    if pre != "" {
+        m.err_code = pre
+        return m
+    }
+    var clean str = path.trim()
+    var db SqliteDb = sqlite.open(clean)
+    var v str = open_verify(db)
+    if v != "" {
+        m.err_code = err_code_of(v)
+        m.err_detail = err_detail_of(v)
+        return m
+    }
+    var cnt List<List<str>> = db.query("SELECT type, COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\' GROUP BY type")
+    var i int = 0
+    while i < cnt.len() {
+        var row0 = cnt[i]
+        var k str = row0[0]
+        var v2 int = str_to_int(row0[1])
+        if k == "table" {
+            m.tables = v2
+        }
+        if k == "view" {
+            m.views = v2
+        }
+        if k == "index" {
+            m.indexes = v2
+        }
+        i = i + 1
+    }
+    m.ok = true
+    m.name = base_name(clean)
+    return m
+}
+
+/// 对象树：sqlite_master 全部用户对象（表/视图/索引）。
+pub fn list_objects(path str) ObjectList {
+    var r ObjectList = ObjectList { ok: false, err_code: "", err_detail: "", objects: [] }
+    var pre str = precheck(path)
+    if pre != "" {
+        r.err_code = pre
+        return r
+    }
+    var db SqliteDb = sqlite.open(path.trim())
+    var v str = open_verify(db)
+    if v != "" {
+        r.err_code = err_code_of(v)
+        r.err_detail = err_detail_of(v)
+        return r
+    }
+    var rows List<List<str>> = db.query("SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 1 ELSE 2 END, name")
+    var base str = canary(db)
+    if rows.len() == 0 {
+        var lerr str = sqlite.last_error()
+        if lerr != base {
+            r.err_code = "introspect_failed"
+            r.err_detail = lerr
+            return r
+        }
+    }
+    r.ok = true
+    var i int = 0
+    while i < rows.len() {
+        var row0 = rows[i]
+        var oi ObjInfo = ObjInfo { otype: row0[0], name: row0[1] }
+        r.objects.push(oi)
+        i = i + 1
+    }
+    return r
+}
+
+/// PRAGMA table_info → 列模型（真实列名/类型/NOTNULL/默认值/PK）。
+fn read_columns(db SqliteDb, tname str) []ColumnInfo {
+    var cols []ColumnInfo = []
+    var rows List<List<str>> = db.query("PRAGMA table_info(" + ident(tname) + ")")
+    var i int = 0
+    while i < rows.len() {
+        var row0 = rows[i]
+        var ci ColumnInfo = ColumnInfo { name: row0[1], ctype: row0[2],
+            notnull: row0[3] == "1", dflt: row0[4], pk: row0[5] != "0" }
+        cols.push(ci)
+        i = i + 1
+    }
+    return cols
+}
+
+/// 表/视图数据页：生成 SQL（列来自真实 schema；search 走 LIKE ESCAPE），
+/// 数据查询为 [c],[c] IS NULL 包装以取得 NULL 标志。
+pub fn table_data(path str, tname str, page int, page_size int, sort_col str, sort_dir str, search str) TableData {
+    var r TableData = TableData { ok: false, err_code: "", err_detail: "", columns: [],
+        cells: [], nulls: [], total: 0, page: page, page_size: page_size, showing: 0 }
+    var pre str = precheck(path)
+    if pre != "" {
+        r.err_code = pre
+        return r
+    }
+    var db SqliteDb = sqlite.open(path.trim())
+    var v str = open_verify(db)
+    if v != "" {
+        r.err_code = err_code_of(v)
+        r.err_detail = err_detail_of(v)
+        return r
+    }
+    var cols []ColumnInfo = read_columns(db, tname)
+    if cols.len() == 0 {
+        r.err_code = "unknown_table"
+        r.err_detail = "no such table or view: " + tname
+        return r
+    }
+    r.columns = cols
+
+    // WHERE（搜索）
+    var where str = ""
+    if search.trim() != "" {
+        var pat str = sq(like_pattern(search.trim()))
+        var parts str = ""
+        var i int = 0
+        while i < cols.len() {
+            var cnw str = cols[i].name
+            var one str = ident(cnw) + " LIKE " + pat + " ESCAPE '\\'"
+            if parts == "" {
+                parts = one
+            } else {
+                parts = parts + " OR " + one
+            }
+            i = i + 1
+        }
+        where = " WHERE " + parts
+    }
+
+    // ORDER BY（白名单校验）
+    var order str = ""
+    var sc str = sort_col.trim()
+    if sc != "" {
+        var found bool = false
+        var wi int = 0
+        while wi < cols.len() {
+            if cols[wi].name == sc {
+                found = true
+                wi = cols.len()
+            } else {
+                wi = wi + 1
+            }
+        }
+        if found {
+            var dirn str = " ASC"
+            if sort_dir.trim().lower() == "desc" {
+                dirn = " DESC"
+            }
+            order = " ORDER BY " + ident(sc) + dirn
+        }
+    }
+
+    // 总数
+    var tot List<List<str>> = db.query("SELECT COUNT(*) FROM " + ident(tname) + where)
+    var base str = canary(db)
+    if tot.len() != 1 {
+        var lerr str = sqlite.last_error()
+        if lerr == base {
+            lerr = "count query returned no row"
+        }
+        r.err_code = "query_failed"
+        r.err_detail = lerr
+        return r
+    }
+    var trow0 = tot[0]
+    r.total = str_to_int(trow0[0])
+
+    // 数据页（值 + NULL 标志交错：v0,f0,v1,f1,...）
+    var pairs str = ""
+    var ci int = 0
+    while ci < cols.len() {
+        var cn str = cols[ci].name
+        var pair str = ident(cn) + ", " + ident(cn) + " IS NULL"
+        if pairs == "" {
+            pairs = pair
+        } else {
+            pairs = pairs + ", " + pair
+        }
+        ci = ci + 1
+    }
+    var ps int = page_size
+    if ps < 1 {
+        ps = 10
+    }
+    if ps > 200 {
+        ps = 200
+    }
+    var pg int = page
+    if pg < 1 {
+        pg = 1
+    }
+    var off int = (pg - 1) * ps
+    var data List<List<str>> = db.query("SELECT " + pairs + " FROM " + ident(tname) + where + order + " LIMIT " + json.encode(ps) + " OFFSET " + json.encode(off))
+    var derr str = sqlite.last_error()
+    if derr != base {
+        r.err_code = "query_failed"
+        r.err_detail = derr
+        return r
+    }
+    var nc int = cols.len()
+    var ri int = 0
+    while ri < data.len() {
+        var src = data[ri]
+        var k int = 0
+        while k < nc {
+            r.cells.push(src[k * 2])
+            var flag str = src[k * 2 + 1]
+            if flag == "1" {
+                r.nulls.push(1)
+            } else {
+                r.nulls.push(0)
+            }
+            k = k + 1
+        }
+        ri = ri + 1
+    }
+    r.showing = data.len()
+    r.ok = true
+    return r
+}
+
+/// 表/视图结构：列模型 + DDL 原文 + 索引（视图无索引）。
+pub fn table_schema(path str, tname str) SchemaResult {
+    var r SchemaResult = SchemaResult { ok: false, err_code: "", err_detail: "", tname: "",
+        ttype: "", columns: [], ddl: "", indexes: [] }
+    r.tname = tname + ""
+    var pre str = precheck(path)
+    if pre != "" {
+        r.err_code = pre
+        return r
+    }
+    var db SqliteDb = sqlite.open(path.trim())
+    var v str = open_verify(db)
+    if v != "" {
+        r.err_code = err_code_of(v)
+        r.err_detail = err_detail_of(v)
+        return r
+    }
+    var cols []ColumnInfo = read_columns(db, tname)
+    if cols.len() == 0 {
+        r.err_code = "unknown_table"
+        r.err_detail = "no such table or view: " + tname
+        return r
+    }
+    r.columns = cols
+    var master List<List<str>> = db.query("SELECT type, COALESCE(sql, '') FROM sqlite_master WHERE name = " + sq(tname))
+    var base str = canary(db)
+    if master.len() != 1 {
+        var lerr str = sqlite.last_error()
+        if lerr == base {
+            lerr = "sqlite_master lookup failed"
+        }
+        r.err_code = "query_failed"
+        r.err_detail = lerr
+        return r
+    }
+    var mrow0 = master[0]
+    r.ttype = mrow0[0]
+    r.ddl = mrow0[1]
+    if r.ttype == "table" {
+        var ilist List<List<str>> = db.query("PRAGMA index_list(" + ident(tname) + ")")
+        var i int = 0
+        while i < ilist.len() {
+            var row0 = ilist[i]
+            var iname str = row0[1]
+            var iinfo List<List<str>> = db.query("PRAGMA index_info(" + ident(iname) + ")")
+            var colsn str = ""
+            var j int = 0
+            while j < iinfo.len() {
+                var irow0 = iinfo[j]
+                if colsn == "" {
+                    colsn = irow0[2]
+                } else {
+                    colsn = colsn + ", " + irow0[2]
+                }
+                j = j + 1
+            }
+            var uni bool = row0[2] == "1"
+            var ii IndexInfo = IndexInfo { name: iname, cols: colsn, unique: uni, origin: row0[3] }
+            r.indexes.push(ii)
+            i = i + 1
+        }
+    }
+    r.ok = true
+    return r
+}
+
+/// 控制台查询（单条只读 SELECT/CTE）：
+/// 守卫 → describe-view 取真实列名 → query_only 连接跑派生表包装取值+NULL 标志。
+/// 截断：LIMIT 1001，超出取前 1000 行并 truncated=true（显式截断，AC-04）。
+pub fn run_query(path str, sql str) QueryResult {
+    var r QueryResult = QueryResult { ok: false, err_code: "", err_detail: "", columns: [],
+        cells: [], nulls: [], rowcount: 0, truncated: false }
+    var g str = guard_sql(sql)
+    if g != "" {
+        r.err_code = "rejected"
+        r.err_detail = g
+        return r
+    }
+    var body str = sql.trim()
+    if body.ends_with(";") {
+        body = body.sub(0, body.len() - 1).trim()
+    }
+    var pre str = precheck(path)
+    if pre != "" {
+        r.err_code = pre
+        return r
+    }
+    var db SqliteDb = sqlite.open(path.trim())
+    var v str = open_verify(db)
+    if v != "" {
+        r.err_code = err_code_of(v)
+        r.err_detail = err_detail_of(v)
+        return r
+    }
+    // describe 连接：仅 CREATE/DROP TEMP VIEW + table_info，绝不执行用户 SQL 主体。
+    var desc SqliteDb = sqlite.open(path.trim())
+    desc.exec("DROP VIEW IF EXISTS temp.__db1_desc")
+    var cbase str = canary(desc)
+    var cr int = desc.exec("CREATE TEMP VIEW __db1_desc AS " + body)
+    var cerr str = sqlite.last_error()
+    if cr < 0 {
+        r.err_code = "query_failed"
+        r.err_detail = cerr
+        if cerr == cbase {
+            r.err_detail = "statement is not a selectable query"
+        }
+        return r
+    }
+    // SQLite 视图为惰性解析：CREATE 可能成功而内层错误（如未知表）要到
+    // table_info 才浮出——此处再取一次金丝雀基线，浮出的引擎原文优先呈现。
+    var cbase2 str = canary(desc)
+    var cinfo List<List<str>> = desc.query("PRAGMA table_info(__db1_desc)")
+    if cinfo.len() == 0 {
+        var lerr str = sqlite.last_error()
+        r.err_code = "query_failed"
+        r.err_detail = lerr
+        if lerr == cbase2 {
+            r.err_detail = "no result columns"
+        }
+        return r
+    }
+    // 列名 + 包装 SELECT
+    var names []str = []
+    var pairs str = ""
+    var i int = 0
+    while i < cinfo.len() {
+        var row0 = cinfo[i]
+        var cn str = row0[1]
+        names.push(cn)
+        var pair str = ident(cn) + ", " + ident(cn) + " IS NULL"
+        if pairs == "" {
+            pairs = pair
+        } else {
+            pairs = pairs + ", " + pair
+        }
+        i = i + 1
+    }
+    r.columns = names
+    var wrap str = "SELECT " + pairs + " FROM (" + body + ") LIMIT 1001"
+    var dbase str = canary(db)
+    var data List<List<str>> = db.query(wrap)
+    var derr str = sqlite.last_error()
+    if derr != dbase {
+        r.err_code = "query_failed"
+        r.err_detail = derr
+        return r
+    }
+    if data.len() == 0 {
+        // 合法空结果
+        r.ok = true
+        r.rowcount = 0
+        return r
+    }
+    var nc int = names.len()
+    var ri int = 0
+    while ri < data.len() {
+        var src = data[ri]
+        var k int = 0
+        while k < nc {
+            r.cells.push(src[k * 2])
+            var flag str = src[k * 2 + 1]
+            if flag == "1" {
+                r.nulls.push(1)
+            } else {
+                r.nulls.push(0)
+            }
+            k = k + 1
+        }
+        ri = ri + 1
+    }
+    var limit int = 1000 * nc
+    if r.cells.len() > limit {
+        r.truncated = true
+        var trimmedc []str = []
+        var trimmedn []int = []
+        var ri2 int = 0
+        while ri2 < limit {
+            trimmedc.push(r.cells[ri2])
+            trimmedn.push(r.nulls[ri2])
+            ri2 = ri2 + 1
+        }
+        r.cells = trimmedc
+        r.nulls = trimmedn
+    }
+    r.rowcount = r.cells.len() / nc
+    r.ok = true
+    return r
+}
+
+/// str → int（引擎返回的数字单元格；负号与非数字安全为 0）。
+fn str_to_int(s str) int {
+    var v int = 0
+    var neg bool = false
+    var i int = 0
+    var t str = s.trim()
+    if t.starts_with("-") {
+        neg = true
+        t = t.sub(1, t.len())
+    }
+    while i < t.len() {
+        var d str = t.sub(i, i + 1)
+        var dv int = digit_of(d)
+        if dv >= 0 {
+            v = v * 10 + dv
+        }
+        i = i + 1
+    }
+    if neg {
+        v = 0 - v
+    }
+    return v
+}
+
+/// 单字符 → 0..9；非数字返回 -1。
+fn digit_of(d str) int {
+    var ds str = "0123456789"
+    var k int = 0
+    while k < 10 {
+        if ds.sub(k, k + 1) == d {
+            return k
+        }
+        k = k + 1
+    }
+    return -1
+}
+
+// ═══════════════════════════════════════════════════════════
+// T-01 能力探针薄委托（生成器要求端点经 db 层；门禁在 probe 内部）
+// ═══════════════════════════════════════════════════════════
+
+pub fn probe_open_missing() str {
+    return probe.open_missing()
+}
+
+pub fn probe_open_garbage() str {
+    return probe.open_garbage()
+}
+
+pub fn probe_readonly_enforce() str {
+    return probe.readonly_enforce()
+}
+
+pub fn probe_readonly_flip() str {
+    return probe.readonly_flip()
+}
+
+pub fn probe_attach_test() str {
+    return probe.attach_test()
+}
+
+pub fn probe_schema_introspect() str {
+    return probe.schema_introspect()
+}
+
+pub fn probe_describe_wrap() str {
+    return probe.describe_wrap()
+}
+
+pub fn probe_multi_statement() str {
+    return probe.multi_statement()
+}
+
+pub fn probe_large_result() str {
+    return probe.large_result()
+}
