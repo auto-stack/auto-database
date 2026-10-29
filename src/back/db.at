@@ -39,30 +39,44 @@ fn like_pattern(kw str) str {
     return "%" + t + "%"
 }
 
-/// 路径末段文件名（发射器无 fs.filename 映射、str.reverse 不可用；自算，
-/// / 与 \ 都处理，自末尾向前扫）。
+/// 路径末段文件名（发射器无 fs.filename 映射；char_at 字符序自末向前扫）。
+/// 含非 ASCII 字符的路径返回全路径（sub 为字节切片不可安全截取，宁繁勿错）。
 fn base_name(p str) str {
     var n int = p.len()
     var i int = n - 1
     var k int = -1
+    var ascii bool = true
     while i >= 0 {
-        var c str = p.sub(i, i + 1)
-        if c == "/" {
-            k = i
+        var cp int = p.char_at(i)
+        if cp >= 128 {
+            ascii = false
             i = -1
         } else {
-            if c == "\\" {
+            if cp == 47 {
                 k = i
                 i = -1
             } else {
-                i = i - 1
+                if cp == 92 {
+                    k = i
+                    i = -1
+                } else {
+                    i = i - 1
+                }
             }
         }
+    }
+    if !ascii {
+        return p
     }
     if k < 0 {
         return p
     }
-    return p.sub(k + 1, n)
+    var segs = p.split("/")
+    var segs2 = p.split("\\")
+    if segs2.len() > segs.len() {
+        segs = segs2
+    }
+    return segs[segs.len() - 1]
 }
 
 /// 金丝雀：跑一个必然语法失败的查询，把全局 last_error 置为已知文本并返回，
@@ -73,52 +87,18 @@ fn canary(db SqliteDb) str {
 }
 
 /// 打开后验证（读路径共用）：sqlite_master 试读 + query_only=ON。
-/// 返回 ""=通过；否则 "code\tdetail"（code ∈ not_a_database | readonly_setup_failed）。
+/// 返回 ""=通过；否则为错误码；详情由调用方直读 sqlite.last_error()。
 fn open_verify(db SqliteDb) str {
     var base str = canary(db)
     var probe List<List<str>> = db.query("SELECT COUNT(*) FROM sqlite_master")
     if probe.len() != 1 {
-        var d str = sqlite.last_error()
-        if d == base {
-            d = "sqlite_master unreadable"
-        }
-        return "not_a_database\t" + d
+        return "not_a_database"
     }
     var qo int = db.exec("PRAGMA query_only=ON")
     if qo < 0 {
-        return "readonly_setup_failed\t" + sqlite.last_error()
+        return "readonly_setup_failed"
     }
     return ""
-}
-
-/// 首个 "\t" 位置（str.find 与发射器签名漂移不可用；自扫）。
-fn tab_pos(v str) int {
-    var i int = 0
-    while i < v.len() {
-        if v.sub(i, i + 1) == "\t" {
-            return i
-        }
-        i = i + 1
-    }
-    return -1
-}
-
-/// "code\tdetail" → code（无 \t 时原样）。
-fn err_code_of(v str) str {
-    var p int = tab_pos(v)
-    if p < 0 {
-        return v
-    }
-    return v.sub(0, p)
-}
-
-/// "code\tdetail" → detail。
-fn err_detail_of(v str) str {
-    var p int = tab_pos(v)
-    if p < 0 {
-        return ""
-    }
-    return v.sub(p + 1, v.len())
 }
 
 /// 打开前的路径判定（各 pub fn 共用）：空→"empty_path"；不存在→
@@ -138,32 +118,84 @@ fn precheck(path str) str {
 // 守卫（只读层①）：单条语句 + 首 token ∈ {select, with} +
 // 普通上下文无 pragma/attach/detach/load_extension。
 // 引号/注释感知：'str'（'' 转义）、"ident"、[ident]（]] 转义）、`ident`、
-// -- 行注释、/* 块注释。非 ASCII 永不构成关键字（按分隔符处理，无害）。
+// -- 行注释、/* 块注释。发射器 sub/len 为字节语义且越界即 panic（与 stdlib
+// "clamp" 文档不符，G-4）：全部前瞻先做 i+1<n 边界判断；非 ASCII 按单字节
+// 分隔符处理（永不构成 ASCII 关键字，无害）。
 // ═══════════════════════════════════════════════════════════
 
-fn is_ident_char(c str) bool {
-    return "abcdefghijklmnopqrstuvwxyz0123456789_$".contains(c)
+/// ASCII 码点是否为 token 字符（字母/数字/_/$）。多字节码点（≥128）按分隔符
+/// 处理——它们永不构成 ASCII 关键字，只影响 token 边界，无害。
+fn is_ident_cp(cp int) bool {
+    if cp >= 97 {
+        if cp <= 122 {
+            return true
+        }
+    }
+    if cp >= 65 {
+        if cp <= 90 {
+            return true
+        }
+    }
+    if cp >= 48 {
+        if cp <= 57 {
+            return true
+        }
+    }
+    if cp == 95 {
+        return true
+    }
+    if cp == 36 {
+        return true
+    }
+    return false
 }
 
-/// 返回 ""=通过；否则拒绝码：empty_statement | multi_statement | not_readonly
+/// ASCII 关键字的确定性哈希（31 多项式，模 1e9+7 防溢出；ASCII 下 char_at
+/// 即码点）。token 用同一算法累计后与关键字哈希直接比对。
+fn kw_hash(s str) int {
+    var h int = 0
+    var i int = 0
+    while i < s.len() {
+        h = (h * 31 + s.char_at(i)) % 1000000007
+        i = i + 1
+    }
+    return h
+}
+
+/// 守卫（只读层①）：单条语句 + 首 token ∈ {select, with} +
+/// 普通上下文无 pragma/attach/detach/load_extension。
+/// 引号/注释感知：'str'（'' 转义）、"ident"、[ident]（]] 转义）、`ident`、
+/// -- 行注释、/* 块注释。全程 char_at 码点整型遍历（sub 为字节切片且炸非
+/// 边界，G-4）；token 以哈希累计比对（发射器不借用 Vec 实参，不能用数组
+/// 参数；哈希碰撞最坏导致误拒，绝不误放行）。
+/// 返回 ""=通过；否则 empty_statement | multi_statement | not_readonly
 /// | forbidden_keyword:<tok>。
 fn guard_sql(sql str) str {
     var t str = sql.trim().lower()
     if t == "" {
         return "empty_statement"
     }
+    var h_sel int = kw_hash("select")
+    var h_with int = kw_hash("with")
+    var h_pragma int = kw_hash("pragma")
+    var h_attach int = kw_hash("attach")
+    var h_detach int = kw_hash("detach")
+    var h_loadext int = kw_hash("load_extension")
     var n int = t.len()
     var i int = 0
     var stmts int = 1
-    var ctx int = 0 // 0=normal 1='str 2="ident 3=[ident] 4=`ident` 5=--line 6=/*block*/
-    var tok str = ""
-    var first_tok str = ""
+    var ctx int = 0 // 0=normal 1=str 2=ident 3=bracket 4=backtick 5=line-cmt 6=block-cmt
+    var h int = 0
+    var toklen int = 0
+    var first_h int = 0
+    var first_len int = 0
     var forbidden str = ""
+    var prev int = 0
     while i < n {
-        var c str = t.sub(i, i + 1)
+        var cp int = t.char_at(i)
         if ctx == 1 {
-            if c == "'" {
-                if t.sub(i + 1, i + 2) == "'" {
+            if cp == 39 {
+                if t.char_at(i + 1) == 39 {
                     i = i + 2
                 } else {
                     ctx = 0
@@ -174,14 +206,14 @@ fn guard_sql(sql str) str {
             }
         } else {
             if ctx == 2 {
-                if c == "\"" {
+                if cp == 34 {
                     ctx = 0
                 }
                 i = i + 1
             } else {
                 if ctx == 3 {
-                    if c == "]" {
-                        if t.sub(i + 1, i + 2) == "]" {
+                    if cp == 93 {
+                        if t.char_at(i + 1) == 93 {
                             i = i + 2
                         } else {
                             ctx = 0
@@ -192,81 +224,84 @@ fn guard_sql(sql str) str {
                     }
                 } else {
                     if ctx == 4 {
-                        if c == "`" {
+                        if cp == 96 {
                             ctx = 0
                         }
                         i = i + 1
                     } else {
                         if ctx == 5 {
-                            if c == "\n" {
+                            if cp == 10 {
                                 ctx = 0
                             }
                             i = i + 1
                         } else {
                             if ctx == 6 {
-                                if c == "/" {
-                                    if t.sub(i - 1, i) == "*" {
+                                if cp == 47 {
+                                    if prev == 42 {
                                         ctx = 0
                                     }
                                 }
                                 i = i + 1
                             } else {
                                 // ── 普通上下文 ──
-                                if is_ident_char(c) {
-                                    tok = tok + c
+                                if is_ident_cp(cp) {
+                                    h = (h * 31 + cp) % 1000000007
+                                    toklen = toklen + 1
                                     i = i + 1
                                 } else {
-                                    if tok != "" {
-                                        if first_tok == "" {
-                                            first_tok = tok
+                                    if toklen > 0 {
+                                        if first_len == 0 {
+                                            first_h = h
+                                            first_len = toklen
                                         }
-                                        if tok == "pragma" {
+                                        if h == h_pragma {
                                             forbidden = "pragma"
                                         }
-                                        if tok == "attach" {
+                                        if h == h_attach {
                                             forbidden = "attach"
                                         }
-                                        if tok == "detach" {
+                                        if h == h_detach {
                                             forbidden = "detach"
                                         }
-                                        if tok == "load_extension" {
+                                        if h == h_loadext {
                                             forbidden = "load_extension"
                                         }
-                                        tok = ""
+                                        h = 0
+                                        toklen = 0
                                     }
-                                    if c == "'" {
+                                    if cp == 39 {
                                         ctx = 1
                                         i = i + 1
                                     } else {
-                                        if c == "\"" {
+                                        if cp == 34 {
                                             ctx = 2
                                             i = i + 1
                                         } else {
-                                            if c == "[" {
+                                            if cp == 91 {
                                                 ctx = 3
                                                 i = i + 1
                                             } else {
-                                                if c == "`" {
+                                                if cp == 96 {
                                                     ctx = 4
                                                     i = i + 1
                                                 } else {
-                                                    if c == "-" {
-                                                        if t.sub(i + 1, i + 2) == "-" {
+                                                    if cp == 45 {
+                                                        if t.char_at(i + 1) == 45 {
                                                             ctx = 5
                                                             i = i + 2
                                                         } else {
                                                             i = i + 1
                                                         }
                                                     } else {
-                                                        if c == "/" {
-                                                            if t.sub(i + 1, i + 2) == "*" {
+                                                        if cp == 47 {
+                                                            if t.char_at(i + 1) == 42 {
                                                                 ctx = 6
                                                                 i = i + 2
                                                             } else {
                                                                 i = i + 1
                                                             }
                                                         } else {
-                                                            if c == ";" {
+                                                            if cp == 59 {
                                                                 stmts = stmts + 1
                                                                 i = i + 1
                                                             } else {
@@ -285,21 +320,23 @@ fn guard_sql(sql str) str {
                 }
             }
         }
+        prev = cp
     }
-    if tok != "" {
-        if first_tok == "" {
-            first_tok = tok
+    if toklen > 0 {
+        if first_len == 0 {
+            first_h = h
+            first_len = toklen
         }
-        if tok == "pragma" {
+        if h == h_pragma {
             forbidden = "pragma"
         }
-        if tok == "attach" {
+        if h == h_attach {
             forbidden = "attach"
         }
-        if tok == "detach" {
+        if h == h_detach {
             forbidden = "detach"
         }
-        if tok == "load_extension" {
+        if h == h_loadext {
             forbidden = "load_extension"
         }
     }
@@ -309,8 +346,11 @@ fn guard_sql(sql str) str {
     if stmts > 1 {
         return "multi_statement"
     }
-    if first_tok != "select" {
-        if first_tok != "with" {
+    if first_len == 0 {
+        return "empty_statement"
+    }
+    if first_h != h_sel {
+        if first_h != h_with {
             return "not_readonly"
         }
     }
@@ -335,8 +375,8 @@ pub fn open_db(path str) FileMeta {
     var db SqliteDb = sqlite.open(clean)
     var v str = open_verify(db)
     if v != "" {
-        m.err_code = err_code_of(v)
-        m.err_detail = err_detail_of(v)
+        m.err_code = v
+        m.err_detail = sqlite.last_error()
         return m
     }
     var cnt List<List<str>> = db.query("SELECT type, COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\' GROUP BY type")
@@ -372,8 +412,8 @@ pub fn list_objects(path str) ObjectList {
     var db SqliteDb = sqlite.open(path.trim())
     var v str = open_verify(db)
     if v != "" {
-        r.err_code = err_code_of(v)
-        r.err_detail = err_detail_of(v)
+        r.err_code = v
+        r.err_detail = sqlite.last_error()
         return r
     }
     var rows List<List<str>> = db.query("SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 1 ELSE 2 END, name")
@@ -425,8 +465,8 @@ pub fn table_data(path str, tname str, page int, page_size int, sort_col str, so
     var db SqliteDb = sqlite.open(path.trim())
     var v str = open_verify(db)
     if v != "" {
-        r.err_code = err_code_of(v)
-        r.err_detail = err_detail_of(v)
+        r.err_code = v
+        r.err_detail = sqlite.last_error()
         return r
     }
     var cols []ColumnInfo = read_columns(db, tname)
@@ -561,8 +601,8 @@ pub fn table_schema(path str, tname str) SchemaResult {
     var db SqliteDb = sqlite.open(path.trim())
     var v str = open_verify(db)
     if v != "" {
-        r.err_code = err_code_of(v)
-        r.err_detail = err_detail_of(v)
+        r.err_code = v
+        r.err_detail = sqlite.last_error()
         return r
     }
     var cols []ColumnInfo = read_columns(db, tname)
@@ -620,15 +660,30 @@ pub fn table_schema(path str, tname str) SchemaResult {
 pub fn run_query(path str, sql str) QueryResult {
     var r QueryResult = QueryResult { ok: false, err_code: "", err_detail: "", columns: [],
         cells: [], nulls: [], rowcount: 0, truncated: false }
-    var g str = guard_sql(sql)
+    var body str = sql.trim()
+    // 仅剥离尾随分号（其后全为空白）：分号后仍有内容则保留原文，由守卫按
+    // 多语句拒绝（绝不静默截断用户语句）。split 字符串安全，不用 sub。
+    var segs = body.split(";")
+    if segs.len() > 1 {
+        var extra bool = false
+        var k int = 1
+        while k < segs.len() {
+            if segs[k].trim() != "" {
+                extra = true
+                k = segs.len()
+            } else {
+                k = k + 1
+            }
+        }
+        if !extra {
+            body = segs[0].trim()
+        }
+    }
+    var g str = guard_sql(body)
     if g != "" {
         r.err_code = "rejected"
         r.err_detail = g
         return r
-    }
-    var body str = sql.trim()
-    if body.ends_with(";") {
-        body = body.sub(0, body.len() - 1).trim()
     }
     var pre str = precheck(path)
     if pre != "" {
@@ -638,8 +693,8 @@ pub fn run_query(path str, sql str) QueryResult {
     var db SqliteDb = sqlite.open(path.trim())
     var v str = open_verify(db)
     if v != "" {
-        r.err_code = err_code_of(v)
-        r.err_detail = err_detail_of(v)
+        r.err_code = v
+        r.err_detail = sqlite.last_error()
         return r
     }
     // describe 连接：仅 CREATE/DROP TEMP VIEW + table_info，绝不执行用户 SQL 主体。
@@ -686,7 +741,10 @@ pub fn run_query(path str, sql str) QueryResult {
         i = i + 1
     }
     r.columns = names
-    var wrap str = "SELECT " + pairs + " FROM (" + body + ") LIMIT 1001"
+    // 内嵌换行再闭合括号：让行注释（-- …）在此终止，不会吞掉 ")"；
+    // 未闭合块注释仍由引擎如实报错。
+    var wrap str = "SELECT " + pairs + " FROM (" + body + "
+) LIMIT 1001"
     var dbase str = canary(db)
     var data List<List<str>> = db.query(wrap)
     var derr str = sqlite.last_error()
@@ -745,13 +803,13 @@ fn str_to_int(s str) int {
     var t str = s.trim()
     if t.starts_with("-") {
         neg = true
-        t = t.sub(1, t.len())
     }
     while i < t.len() {
-        var d str = t.sub(i, i + 1)
-        var dv int = digit_of(d)
-        if dv >= 0 {
-            v = v * 10 + dv
+        var cp int = t.char_at(i)
+        if cp >= 48 {
+            if cp <= 57 {
+                v = v * 10 + cp - 48
+            }
         }
         i = i + 1
     }
@@ -761,18 +819,6 @@ fn str_to_int(s str) int {
     return v
 }
 
-/// 单字符 → 0..9；非数字返回 -1。
-fn digit_of(d str) int {
-    var ds str = "0123456789"
-    var k int = 0
-    while k < 10 {
-        if ds.sub(k, k + 1) == d {
-            return k
-        }
-        k = k + 1
-    }
-    return -1
-}
 
 // ═══════════════════════════════════════════════════════════
 // T-01 能力探针薄委托（生成器要求端点经 db 层；门禁在 probe 内部）
