@@ -9,7 +9,9 @@ description: "SQLite visual database studio - Object Tree, Paginated DataTable, 
 
 scene: "ui"
 render: "vue"
+api: "rust"
 title: "Database Studio"
 title_zh: "数据库工作室"
 front_port: 17838
+back_port: 17839
 desktop: "true"

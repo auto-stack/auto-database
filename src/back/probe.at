@@ -1,0 +1,412 @@
+// back/probe.at — DATABASE-001 / T-01 只读浏览能力探针（应用内实测，隔离数据）。
+//
+// 门禁：AUTO_DB_PROBE=1，否则一律返回 "disabled"（变更型测试钩子不得常驻生效）。
+// 隔离目录：AUTO_DB_PROBE_DIR（必须显式指向一次性 scratch；由
+// tests/basic/fixtures/make_fixtures.py 预先产出 basic_a.db / basic_b.db /
+// garbage.db，探针绝不触碰真实用户文件）。
+// 证据记录：docs/plans/evidence/001/capability-decision.md（T-01 输出）。
+//
+// 探针只回答设计决策问题：
+//   P1 open_missing     sqlite.open 对不存在路径是否静默建文件（决定必须 fs.exists 预检）
+//   P2 open_garbage     非数据库文件的失败面（决定损坏检测合同）
+//   P3 readonly_enforce PRAGMA query_only=ON 后写语句/写CTE/VACUUM 是否引擎级拒绝
+//   P4 readonly_flip    经 query() 翻转 query_only 后写是否放行（决定必须关键字守卫）
+//   P5 attach_test      query_only 下 ATTACH 与对 attached 库写入的行为
+//   P6 schema_introspect sqlite_master + PRAGMA table_info/index_list（含中文标识符）
+//   P7 describe_wrap    TEMP VIEW 描述任意 SELECT 列名 + 派生表包装取 NULL 标志
+//   P8 multi_statement  query() 对多语句只跑首条还是整批（决定用户 SQL 只走 query）
+//   P9 large_result     1200 行一次性返回（决定分页/截断预算）
+
+use auto.env
+use auto.json
+use auto.sqlite
+
+fn probe_guard() str {
+    if env.get("AUTO_DB_PROBE") == "1" {
+        return "ok"
+    }
+    return "disabled"
+}
+
+fn probe_dir() str {
+    return env.get("AUTO_DB_PROBE_DIR")
+}
+
+fn dir_or_fail() str {
+    var d str = probe_dir()
+    if d == "" {
+        return "probe_dir_required"
+    }
+    return "ok"
+}
+
+/// SQL 字符串字面量：单引号包裹 + 内部 ' 翻倍（与 todo 同款边界纪律）。
+fn sq(s str) str {
+    return "'" + s.replace("'", "''") + "'"
+}
+
+fn jbool(b bool) str {
+    return json.encode(b)
+}
+
+fn jint(n int) str {
+    return json.encode(n)
+}
+
+fn jstr(s str) str {
+    return json.encode(s)
+}
+
+/// P1：open 不存在路径 → 是否静默创建空库文件。
+pub fn open_missing() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var path str = probe_dir() + "/probe_missing.db"
+    var before bool = fs.exists(path)
+    var db SqliteDb = sqlite.open(path)
+    var master int = db.query("SELECT COUNT(*) FROM sqlite_master").len()
+    var after bool = fs.exists(path)
+    var lerr str = sqlite.last_error()
+    var out str = "{\"existed_before\":"
+    out = out + jbool(before)
+    out = out + ",\"exists_after_open\":"
+    out = out + jbool(after)
+    out = out + ",\"master_query_rows\":"
+    out = out + jint(master)
+    out = out + ",\"last_error\":"
+    out = out + jstr(lerr)
+    out = out + "}"
+    return out
+}
+
+/// P2：打开非 SQLite 文件 → open 惰性成功，首次读 sqlite_master 报错。
+pub fn open_garbage() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var path str = probe_dir() + "/garbage.db"
+    var existed bool = fs.exists(path)
+    var db SqliteDb = sqlite.open(path)
+    var rows List<List<str>> = db.query("SELECT name FROM sqlite_master")
+    var lerr str = sqlite.last_error()
+    var out str = "{\"existed\":"
+    out = out + jbool(existed)
+    out = out + ",\"master_rows\":"
+    out = out + jint(rows.len())
+    out = out + ",\"last_error\":"
+    out = out + jstr(lerr)
+    out = out + "}"
+    return out
+}
+
+/// P3：query_only=ON 引擎级只读强制（写/写CTE/VACUUM/写PRAGMA 全部拒绝）。
+pub fn readonly_enforce() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    var qo int = db.exec("PRAGMA query_only=ON")
+    var v0 List<List<str>> = db.query("SELECT v FROM __sentinel WHERE k='guard'")
+    // 每次尝试后立即快照 last_error，避免全局错误互相覆盖。
+    var a1 List<List<str>> = db.query("INSERT INTO __sentinel VALUES ('p3','x')")
+    var e1 str = sqlite.last_error()
+    var a2 List<List<str>> = db.query("UPDATE __sentinel SET v='tampered' WHERE k='guard'")
+    var e2 str = sqlite.last_error()
+    var a3 List<List<str>> = db.query("DELETE FROM __sentinel")
+    var e3 str = sqlite.last_error()
+    var a4 List<List<str>> = db.query("CREATE TABLE p3_ct(x)")
+    var e4 str = sqlite.last_error()
+    var a5 List<List<str>> = db.query("DROP TABLE customers")
+    var e5 str = sqlite.last_error()
+    var a6 List<List<str>> = db.query("WITH d AS (DELETE FROM __sentinel RETURNING *) SELECT * FROM d")
+    var e6 str = sqlite.last_error()
+    var a7 List<List<str>> = db.query("VACUUM")
+    var e7 str = sqlite.last_error()
+    var a8 List<List<str>> = db.query("SELECT v FROM __sentinel WHERE k='guard'")
+    var out str = "{\"qo_exec_rc\":"
+    out = out + jint(qo)
+    out = out + ",\"insert_rows\":"
+    out = out + jint(a1.len())
+    out = out + ",\"insert_err\":"
+    out = out + jstr(e1)
+    out = out + ",\"update_err\":"
+    out = out + jstr(e2)
+    out = out + ",\"delete_err\":"
+    out = out + jstr(e3)
+    out = out + ",\"create_err\":"
+    out = out + jstr(e4)
+    out = out + ",\"drop_err\":"
+    out = out + jstr(e5)
+    out = out + ",\"cte_delete_err\":"
+    out = out + jstr(e6)
+    out = out + ",\"vacuum_err\":"
+    out = out + jstr(e7)
+    out = out + ",\"sentinel_before\":"
+    out = out + json.encode(v0)
+    out = out + ",\"sentinel_after\":"
+    out = out + json.encode(a8)
+    out = out + "}"
+    return out
+}
+
+/// P4：经 query() 翻转 query_only=OFF 后写是否放行（关键字守卫必要性的实证）。
+pub fn readonly_flip() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    db.exec("PRAGMA query_only=ON")
+    var c0 List<List<str>> = db.query("SELECT COUNT(*) FROM __sentinel")
+    var f1 List<List<str>> = db.query("PRAGMA query_only=OFF")
+    var e1 str = sqlite.last_error()
+    var f2 List<List<str>> = db.query("INSERT INTO __sentinel VALUES ('flip','inserted')")
+    var e2 str = sqlite.last_error()
+    var f3 List<List<str>> = db.query("SELECT COUNT(*) FROM __sentinel")
+    var out str = "{\"count_before\":"
+    out = out + json.encode(c0)
+    out = out + ",\"flip_pragma_rows\":"
+    out = out + jint(f1.len())
+    out = out + ",\"flip_pragma_err\":"
+    out = out + jstr(e1)
+    out = out + ",\"insert_rows\":"
+    out = out + jint(f2.len())
+    out = out + ",\"insert_err\":"
+    out = out + jstr(e2)
+    out = out + ",\"count_after\":"
+    out = out + json.encode(f3)
+    out = out + "}"
+    return out
+}
+
+/// P5：query_only 下 ATTACH 与对 attached 库写入。
+pub fn attach_test() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var aux str = probe_dir() + "/aux_probe.db"
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    db.exec("PRAGMA query_only=ON")
+    var t1 List<List<str>> = db.query("ATTACH DATABASE " + sq(aux) + " AS aux")
+    var e1 str = sqlite.last_error()
+    var aux_exists bool = fs.exists(aux)
+    var t2 List<List<str>> = db.query("CREATE TABLE IF NOT EXISTS aux.probe_t(x)")
+    var e2 str = sqlite.last_error()
+    var t3 List<List<str>> = db.query("SELECT COUNT(*) FROM customers")
+    var out str = "{\"attach_rows\":"
+    out = out + jint(t1.len())
+    out = out + ",\"attach_err\":"
+    out = out + jstr(e1)
+    out = out + ",\"aux_exists\":"
+    out = out + jbool(aux_exists)
+    out = out + ",\"create_in_aux_err\":"
+    out = out + jstr(e2)
+    out = out + ",\"main_still_readable\":"
+    out = out + json.encode(t3)
+    out = out + "}"
+    return out
+}
+
+/// P6：真实 schema 内省（sqlite_master + PRAGMA table_info/index_list/index_info，
+/// 含中文表名/列名；全部在 query_only 连接上完成）。
+pub fn schema_introspect() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    db.exec("PRAGMA query_only=ON")
+    var m List<List<str>> = db.query("SELECT type, name FROM sqlite_master ORDER BY type, name")
+    var t1 List<List<str>> = db.query("PRAGMA table_info(customers)")
+    var t2 List<List<str>> = db.query("PRAGMA table_info(客户资料)")
+    var i1 List<List<str>> = db.query("PRAGMA index_list(customers)")
+    var i2 List<List<str>> = db.query("PRAGMA index_info(idx_customers_country)")
+    var ddl List<List<str>> = db.query("SELECT sql FROM sqlite_master WHERE name='customers'")
+    var v1 List<List<str>> = db.query("SELECT COUNT(*) FROM country_summary")
+    var out str = "{\"master_objects\":"
+    out = out + json.encode(m)
+    out = out + ",\"table_info_customers\":"
+    out = out + json.encode(t1)
+    out = out + ",\"table_info_chinese\":"
+    out = out + json.encode(t2)
+    out = out + ",\"index_list\":"
+    out = out + json.encode(i1)
+    out = out + ",\"index_info\":"
+    out = out + json.encode(i2)
+    out = out + ",\"ddl_row\":"
+    out = out + json.encode(ddl)
+    out = out + ",\"view_count\":"
+    out = out + json.encode(v1)
+    out = out + "}"
+    return out
+}
+
+/// P7：TEMP VIEW 描述任意 SELECT 的真实列名 + 派生表包装取 NULL 标志。
+/// desc 连接（无 query_only，仅建/删临时视图，绝不执行用户 SQL 主体）；
+/// data 连接（query_only=ON）跑包装后的数据查询。
+pub fn describe_wrap() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var data SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    data.exec("PRAGMA query_only=ON")
+    var desc SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+
+    // 7a 普通表查询：描述列名 + 包装取 NULL 标志
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var c1 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (SELECT * FROM customers ORDER BY id LIMIT 6)")
+    var cols1 List<List<str>> = desc.query("PRAGMA table_info(__desc)")
+    var w1 List<List<str>> = data.query("SELECT [id], [id] IS NULL, [contact_name], [contact_name] IS NULL, [phone], [phone] IS NULL FROM (SELECT * FROM customers ORDER BY id LIMIT 6)")
+
+    // 7b 聚合表达式列（自动别名 n）
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var c2 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (SELECT COUNT(*) AS n, country FROM customers GROUP BY country)")
+    var cols2 List<List<str>> = desc.query("PRAGMA table_info(__desc)")
+    var w2 List<List<str>> = data.query("SELECT [n], [country], [country] IS NULL FROM (SELECT COUNT(*) AS n, country FROM customers GROUP BY country)")
+
+    // 7c 只读 CTE 内层
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var cte str = "WITH c AS (SELECT id, contact_name FROM customers WHERE id <= 4) SELECT * FROM c"
+    var c3 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (" + cte + ")")
+    var e3 str = sqlite.last_error()
+    var cols3 List<List<str>> = desc.query("PRAGMA table_info(__desc)")
+    var w3 List<List<str>> = data.query("SELECT [id], [contact_name], [contact_name] IS NULL FROM (" + cte + ")")
+    var e3b str = sqlite.last_error()
+
+    // 7d 重复列名边界
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var c4 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (SELECT id, id FROM customers)")
+    var e4 str = sqlite.last_error()
+    var cols4 List<List<str>> = desc.query("PRAGMA table_info(__desc)")
+    var w4 List<List<str>> = data.query("SELECT [id] FROM (SELECT id, id FROM customers) LIMIT 1")
+    var e4b str = sqlite.last_error()
+
+    // 7e 非 SELECT 视图体必须被拒（且哨兵不被动）
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var c5 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (DELETE FROM __sentinel)")
+    var e5 str = sqlite.last_error()
+    var sent List<List<str>> = data.query("SELECT COUNT(*) FROM __sentinel")
+
+    // 7f 中文表/列
+    desc.exec("DROP VIEW IF EXISTS temp.__desc")
+    var c6 int = desc.exec("CREATE TEMP VIEW __desc AS SELECT * FROM (SELECT 姓名 FROM 客户资料)")
+    var cols6 List<List<str>> = desc.query("PRAGMA table_info(__desc)")
+
+    var out str = "{\"c1_rc\":"
+    out = out + jint(c1)
+    out = out + ",\"cols1\":"
+    out = out + json.encode(cols1)
+    out = out + ",\"wrap1\":"
+    out = out + json.encode(w1)
+    out = out + ",\"c2_rc\":"
+    out = out + jint(c2)
+    out = out + ",\"cols2\":"
+    out = out + json.encode(cols2)
+    out = out + ",\"wrap2\":"
+    out = out + json.encode(w2)
+    out = out + ",\"c3_cte_rc\":"
+    out = out + jint(c3)
+    out = out + ",\"c3_err\":"
+    out = out + jstr(e3)
+    out = out + ",\"cols3\":"
+    out = out + json.encode(cols3)
+    out = out + ",\"wrap3_cte\":"
+    out = out + json.encode(w3)
+    out = out + ",\"wrap3_err\":"
+    out = out + jstr(e3b)
+    out = out + ",\"c4_dup_rc\":"
+    out = out + jint(c4)
+    out = out + ",\"c4_err\":"
+    out = out + jstr(e4)
+    out = out + ",\"cols4\":"
+    out = out + json.encode(cols4)
+    out = out + ",\"wrap4_err\":"
+    out = out + jstr(e4b)
+    out = out + ",\"c5_nonselect_rc\":"
+    out = out + jint(c5)
+    out = out + ",\"c5_err\":"
+    out = out + jstr(e5)
+    out = out + ",\"sentinel_after\":"
+    out = out + json.encode(sent)
+    out = out + ",\"c6_chinese_rc\":"
+    out = out + jint(c6)
+    out = out + ",\"cols6\":"
+    out = out + json.encode(cols6)
+    out = out + "}"
+    return out
+}
+
+/// P8：query() 对多语句的行为（只跑首条还是整批；尾随写是否执行）。
+pub fn multi_statement() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    db.exec("PRAGMA query_only=ON")
+    var s1 List<List<str>> = db.query("SELECT 1; SELECT 2")
+    var cnt0 List<List<str>> = db.query("SELECT COUNT(*) FROM __sentinel")
+    var s2 List<List<str>> = db.query("SELECT 1; DELETE FROM __sentinel")
+    var e2 str = sqlite.last_error()
+    var cnt1 List<List<str>> = db.query("SELECT COUNT(*) FROM __sentinel")
+    var out str = "{\"two_selects\":"
+    out = out + json.encode(s1)
+    out = out + ",\"count_before\":"
+    out = out + json.encode(cnt0)
+    out = out + ",\"select_then_delete_rows\":"
+    out = out + jint(s2.len())
+    out = out + ",\"select_then_delete_err\":"
+    out = out + jstr(e2)
+    out = out + ",\"count_after\":"
+    out = out + json.encode(cnt1)
+    out = out + "}"
+    return out
+}
+
+/// P9：1200 行一次性返回（内存预算观察；分页/截断策略据此冻结）。
+pub fn large_result() str {
+    if probe_guard() == "disabled" {
+        return "disabled"
+    }
+    if dir_or_fail() == "probe_dir_required" {
+        return "probe_dir_required"
+    }
+    var db SqliteDb = sqlite.open(probe_dir() + "/basic_a.db")
+    db.exec("PRAGMA query_only=ON")
+    var all List<List<str>> = db.query("SELECT id, ts, action, actor, ip FROM audit_logs ORDER BY id")
+    var page List<List<str>> = db.query("SELECT id, ts, action, actor, ip FROM audit_logs ORDER BY id LIMIT 50 OFFSET 100")
+    var out str = "{\"all_rows\":"
+    out = out + jint(all.len())
+    out = out + ",\"page_rows\":"
+    out = out + jint(page.len())
+    out = out + ",\"first_id\":"
+    out = out + jstr(all[0][0])
+    out = out + ",\"last_id\":"
+    out = out + jstr(all[all.len() - 1][0])
+    out = out + ",\"page_first_id\":"
+    out = out + jstr(page[0][0])
+    out = out + "}"
+    return out
+}

@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 2
-current_step: 0
+current_step: 1
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/database/basic-capabilities.md]
@@ -105,7 +105,8 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 
 ## 8. 执行步骤
 
-- [ ] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：有界核查现有 Auto SQLite 的打开失败、只读连接、单语句/只读判定、动态结果/NULL、资源关闭和取消/分页；固定版本和前置归属。已读源码 D:/autostack/auto-lang/crates/a2r-std/src/sqlite.rs、crates/auto-lang-core/src/vm/ffi/stdlib/sqlite.rs 只是调查入口，禁止 app 手写 Rust 或仅检查 open 句柄非空。若接口缺失，登记 SDK 前置并阻塞依赖任务。若需后端，17839 为候选。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
+- [x] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：有界核查现有 Auto SQLite 的打开失败、只读连接、单语句/只读判定、动态结果/NULL、资源关闭和取消/分页；固定版本和前置归属。已读源码 D:/autostack/auto-lang/crates/a2r-std/src/sqlite.rs、crates/auto-lang-core/src/vm/ffi/stdlib/sqlite.rs 只是调查入口，禁止 app 手写 Rust 或仅检查 open 句柄非空。若接口缺失，登记 SDK 前置并阻塞依赖任务。若需后端，17839 为候选。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
+  [✅ 已完成 2026-10-29] 探针实证 9 项（P1..P9，`/api/probe/*`，AUTO_DB_PROBE 隔离目录）；输出 `docs/plans/evidence/001/capability-decision.md`（冻结只读协议 v1：exists 预检→query_only=ON→关键字守卫→哈希 oracle 三层；describe+wrap 列名/NULL 协议；金丝雀错误隔离）。原始输出 `docs/plans/attachments/001/t01-probe-outputs.txt`（sha256 bde999ee…c42e，local-only）。关键实证：open 静默建文件→必须 exists 预检；query_only 引擎级拦截全部写（含 VACUUM/attached 写）；经 query() 翻转 query_only 后写穿透→守卫必须拦 pragma/attach；多语句仅首条执行；describe-view+派生表包装取得真实列名与 NULL 标志（CTE/聚合/中文/重复列名 id:1 全通过）；last_error 进程级全局陈旧→金丝雀协议（G-1 登记，不阻塞）。无 SDK 前置阻塞项；pac.at 增 `api:"rust"`+`back_port:17839`；新增 `src/back/probe.at`、`src/back/api.at`（探针端点）、`tests/basic/fixtures/make_fixtures.py`。
 - [ ] T-02（owner_stage=work；依赖 T-01；AC-01..04）：真实数据接缝：新增 src/back/sqlite_service.at / api.at（拟议），接经 T-01 证实的只读 provider；连接关闭/切库释放资源，错误与内存 fixture 明确区分。
 - [ ] T-03（owner_stage=work；依赖 T-02；AC-01..04）：Schema与真实查询：实现实际表/schema读取及查询结果模型，行数/列名/NULL来自引擎；确定分页或显式截断预算，超过预算有真实状态。
 - [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面去模拟化：现有对象树/结果表/SQL输入接真数据；去掉模拟事务和写入成功提示，不可用写控件隐藏或明确禁用；显示文件身份和只读状态。

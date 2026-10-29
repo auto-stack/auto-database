@@ -1,0 +1,52 @@
+// back/api.at — DATABASE-001 后端 API。
+//
+// T-01 阶段仅暴露环境门禁的能力探针端点（/api/probe/*，AUTO_DB_PROBE=1 才生效）；
+// 真实只读浏览端点（open/schema/table_data/query/close）由 T-02/T-03 按同一
+// 接缝补齐。生成器约定：所有 #[api] 端点经 db 层模块薄委托。
+
+use probe
+
+#[api(method = "GET", path = "/api/probe/open_missing")]
+pub fn probe_open_missing() str {
+    return probe.open_missing()
+}
+
+#[api(method = "GET", path = "/api/probe/open_garbage")]
+pub fn probe_open_garbage() str {
+    return probe.open_garbage()
+}
+
+#[api(method = "GET", path = "/api/probe/readonly_enforce")]
+pub fn probe_readonly_enforce() str {
+    return probe.readonly_enforce()
+}
+
+#[api(method = "GET", path = "/api/probe/readonly_flip")]
+pub fn probe_readonly_flip() str {
+    return probe.readonly_flip()
+}
+
+#[api(method = "GET", path = "/api/probe/attach_test")]
+pub fn probe_attach_test() str {
+    return probe.attach_test()
+}
+
+#[api(method = "GET", path = "/api/probe/schema_introspect")]
+pub fn probe_schema_introspect() str {
+    return probe.schema_introspect()
+}
+
+#[api(method = "GET", path = "/api/probe/describe_wrap")]
+pub fn probe_describe_wrap() str {
+    return probe.describe_wrap()
+}
+
+#[api(method = "GET", path = "/api/probe/multi_statement")]
+pub fn probe_multi_statement() str {
+    return probe.multi_statement()
+}
+
+#[api(method = "GET", path = "/api/probe/large_result")]
+pub fn probe_large_result() str {
+    return probe.large_result()
+}
