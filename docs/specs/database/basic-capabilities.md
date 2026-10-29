@@ -37,10 +37,10 @@
 
 - 大结果：浏览分页有界（页大小 ≤200）；控制台 >1000 行截断并标注 truncated。
 - 句柄：查询失败/切库/关闭不泄漏文件锁（每请求 RAII）。
-- 双端：vue（Playwright 驱动）与 vm（AutoUI MCP 驱动）完成同一用户链路
-  打开→浏览→错误→切库（tests/basic/verify_basic.py --profile vue|vm）。
-
-## 5. 已知边界（如实声明）
+- 双端：vue（Playwright 驱动，verify_basic.py --profile vue 全链路 21 项）与
+  vm（VM 解释器内以 Init 自驱钩子确定性执行同一链路——tests/basic/tools/
+  vm_e2e_hook.py 临时改写 .Init，状态经 AutoUI MCP autoui_state 读取；注入式
+  21 项电池为环境安静时的复验入口）完成 打开→浏览→错误→切库。
 
 - NULL 单元格统一显示为文本 "NULL"（与字面 "NULL" 值视觉不可分；API 层以独立
   nulls 标志区分，oracle 比对不受影响）。

@@ -119,7 +119,7 @@ fn precheck(path str) str {
 // 普通上下文无 pragma/attach/detach/load_extension。
 // 引号/注释感知：'str'（'' 转义）、"ident"、[ident]（]] 转义）、`ident`、
 // -- 行注释、/* 块注释。发射器 sub/len 为字节语义且越界即 panic（与 stdlib
-// "clamp" 文档不符，G-4）：全部前瞻先做 i+1<n 边界判断；非 ASCII 按单字节
+// 边界，G-4）：前瞻统一用 char_at(i+1)（越界安全返回 0，不 panic）；非 ASCII 按单字节
 // 分隔符处理（永不构成 ASCII 关键字，无害）。
 // ═══════════════════════════════════════════════════════════
 
