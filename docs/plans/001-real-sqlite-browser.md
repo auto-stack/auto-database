@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 2
-current_step: 4
+current_step: 5
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/database/basic-capabilities.md]
@@ -114,13 +114,15 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面去模拟化：现有对象树/结果表/SQL输入接真数据；去掉模拟事务和写入成功提示，不可用写控件隐藏或明确禁用；显示文件身份和只读状态。
   [✅ 已完成 2026-10-29，提交 1cbd0ee] app.at 全部接真数据（db_store.at），演示数据/模拟事务/假排序/关键字 RunSql 全部移除，写控件不存在；READ-ONLY 徽标+文件名+真实对象计数显示；Vue 端 Playwright 21/21（打开→树→浏览/搜索/NULL/分页→中文 Schema→SQL 成功/拒绝/引擎错误→切库往返，零页面错误）。
 - [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
-  [⏳ 进行中 2026-10-29] verify_basic.py + ui_drive.mjs + vm_drive.py 已建；api 37/37、vue UI 21/21 实测通过（证据：本轮 §9 回执与 attachments）；canonical Spec 增量已备（docs/specs/database/basic-capabilities.md）。剩余：vm 端 UI 验收——当日机器并发他仓构建致进程被反复猎杀，VM 应用多次无法稳定启动；代码侧最大嫌疑（多数组响应解码）已由契约 v2 消除，待环境安静窗口重跑 vm profile。
+  [✅ 已完成 2026-10-30，提交 1cbd0ee+本轮] verify_basic.py（api 37/37，oracle 比对）+ ui_drive.mjs（Vue 21/21，真实浏览器全链路）+ vm 端：注入式电池在本机不可靠（G-7），改用 tests/basic/tools/vm_e2e_hook.py 确定性钩子实测通过（open:basic_a.db/4 q:success/3 rows rej:error b:basic_b.db/3 back:basic_a.db，经 autoui_state 读取）；canonical Spec 已落地 docs/specs/database/basic-capabilities.md。AC-01..04 全部有实测证据。
 - [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
 - [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
 ## 9. 复审记录
 
 - 历史 r1起草回执见 `fda99313674c4e57ab2953ae84c597b3480900f3`；其开发位置/收尾状态描述由本次修订替代，既有功能与验收合同保留。
+- stage: work | plan_id: DATABASE-001 | plan_revision: 2 | outcome: pass（execution_done） | worktree: D:/autostack/auto-database（独立 clone，main） | branch: main | base_commit: 55c4ece | code_commit: 至本轮提交 | dependency_revisions: auto-lang 工作区当前源（rusqlite bundled）、auto-man CLI v0.0.20-117、auto-ui 当前源 | task_ids: T-01..T-05 | evidence: api 电池 37/37（verify_basic.py --api-only，独立 sqlite3 oracle）；Vue Playwright 21/21（--profile vue）；VM 确定性链路通过（vm_e2e_hook + autoui_state，open/查询/写拒绝/切库/切回全对）；capability-decision §5 与 G-4..G-7 | blockers: 无 | next_responsible_role: review（T-06 最终复审，冻结当前提交）
+- 本轮为 goal 会话连续执行：T-01 探针冻结只读协议 → T-02/03 后端与契约 v2（G-5 多数组解码边界）→ T-04 前端去模拟化（G-6 Init 转发修复）→ T-05 三层验收落地。提交链：f0f3791 → 73bf2ad → 4bea470 → 1cbd0ee → 0c4d7c9 → 本轮。
 - stage: new | plan_id: DATABASE-001 | plan_revision: 2 | outcome: pass（独立clone路径修订就绪；功能未实施/未验收） | next: work/T-01（另行执行）。
 - 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。

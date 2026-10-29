@@ -79,7 +79,16 @@ def main():
     db_b = sys.argv[3]
     m = Mcp(mcp_url)
 
-    snap = m.snapshot()
+    # 首个快照可能为空（MCP 渲染时序）：等到 Database Studio 出现为止
+    snap = ""
+    for _ in range(30):
+        try:
+            snap = m.snapshot()
+            if "Database Studio" in snap:
+                break
+        except Exception:
+            pass
+        time.sleep(3)
     record("ui-load", "Database Studio" in snap, "page renders")
     record("no-demo-data", "northwind" not in snap and "Alfreds" not in snap, "demo absent")
     record("closed-state", "未打开" in snap, "closed state visible")
@@ -92,16 +101,27 @@ def main():
         path_id = m2.group(1) if m2 else None
     record("path-input-found", path_id is not None, str(path_id))
     if path_id:
-        m.type(path_id, db_a)
-        time.sleep(0.5)
-        snap = m.snapshot()
-        open_id = m.click_by_text(snap, "打开")
-        record("open-btn-found", open_id is not None, str(open_id))
-        if open_id:
+        # VM 事件注入在负载下偶发丢失：type+press 重试直至 connected=true（30s）
+        opened = False
+        for attempt in range(3):
+            m.type(path_id, db_a)
+            time.sleep(0.8)
+            snap = m.snapshot()
+            open_id = m.click_by_text(snap, "打开")
+            if attempt == 0:
+                record("open-btn-found", open_id is not None, str(open_id))
+            if not open_id:
+                continue
             m.press(open_id)
-            time.sleep(2)
-        st = m.state("connected", "file_name", "table_count", "view_count", "index_count")
-        record("open-a-state", 'connected: true' in st and 'basic_a.db' in st and 'table_count: 4' in st, st[:200])
+            for _ in range(10):
+                time.sleep(2)
+                st = m.state("connected", "file_name", "table_count", "view_count", "index_count")
+                if "connected: true" in st:
+                    opened = True
+                    break
+            if opened:
+                break
+        record("open-a-state", opened and 'basic_a.db' in st and 'table_count: 4' in st, st[:200])
 
         snap = m.snapshot()
         record("open-a-readonly", "READ-ONLY" in snap, "badge visible")

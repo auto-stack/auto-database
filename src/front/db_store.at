@@ -119,10 +119,6 @@ store DbStore {
                         if first == "" {
                             first = fallback
                         }
-                        // VM 诊断门（临时）
-                        if env.get("AUTO_DB_VM_DIAG") == "skip_select" {
-                            .activeTable = ""
-                        } else {
                         if first != "" {
                             .DbSelect("t/" + first)
                         } else {
@@ -132,7 +128,6 @@ store DbStore {
                             .total = 0
                             .totalPages = 1
                             .showingText = ""
-                        }
                         }
                     } else {
                         .objects = []
@@ -251,9 +246,6 @@ store DbStore {
         }
 
         .LoadTable -> {
-            if env.get("AUTO_DB_VM_DIAG") == "skip_table" {
-                .connected = true
-            } else {
             if .db_path != "" {
             var cl ColumnList = db_columns(.db_path, .activeTable)
             if !cl.ok {
@@ -326,14 +318,9 @@ store DbStore {
                 }
             }
             }
-            }
         }
 
         .LoadSchema -> {
-            if env.get("AUTO_DB_VM_DIAG") == "skip_schema" {
-                .connected = true
-            } else {
-            if .db_path != "" {
             if .db_path != "" {
             var si SchemaInfo = db_schema(.db_path, .activeTable)
             if si.ok {
@@ -367,7 +354,6 @@ store DbStore {
                 .schemaCols = sc2.columns
             } else {
                 .schemaCols = []
-            }
             }
             }
         }

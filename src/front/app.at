@@ -24,7 +24,7 @@ widget App {
     }
 
     on {
-        .Init -> { }
+        .Init -> { store.Init() }
         .WPathInput(v) -> { store.PathInput(v) }
         .WOpenDb -> { store.OpenDb() }
         .WCloseDb -> { store.CloseDb() }

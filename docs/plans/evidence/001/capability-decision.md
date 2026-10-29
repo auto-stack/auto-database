@@ -48,6 +48,10 @@
 | G-1 | `sqlite.last_error()` 为**进程级全局且成功不清空**——错误文本可能是陈旧值（P4/P7 连续操作实证） | t01-probe-outputs（readonly_flip 错误文本与 count 矛盾；describe 后残留语法错误） | 每个错误敏感操作前跑「金丝雀失败查询」快照基线文本，操作后对比：文本变化⇒本次失败且取新文本；结构信号（fs.exists、恒 1 行查询返回空）优先 | auto-lang（sqlite per-connection error 通道）；落地后可移除金丝雀 |
 | G-2 | 无只读打开标志、open 静默回退内存库 | P1/P4 | exists 预检 + query_only=ON + 守卫 + 哈希 oracle（三层，见 §4） | auto-lang（`open_readonly` 类接口）；落地前本合同不依赖 |
 | G-3 | query 单元格全转 str、无列元数据 | P7 | describe+wrap 协议（§4-D）；数值仍以字符串呈现（SQLite 动态类型下与 oracle 比对按文本+类型标注） | auto-lang（typed query/columns API）；非阻塞 |
+| G-4 | a2r 发射器字符串语义三连：`str.sub` 为字节切片且越界/非边界即 panic（stdlib 文档称 clamp，不符）；`len()`/`char_at` 按字符；`str.find` 需第三参 start（签名漂移）；`str.reverse`/`fs.size`/`fs.filename` 无发射映射 | guard_sql 首版多次 E0308/panic（svc-err 日志） | 守卫改 char_at 码点整型+哈希比对；全文件禁用 sub；文件名自算；detail 直读全局错误 | auto-lang（sub 语义对齐/补映射）；已规避，不阻塞 |
+| G-5 | 生成的 HTTP 客户端/VM FFI 解码含 **≥2 个数组字段** 的响应结构失败（vue 侧静默错型 `Vec<String>`；VM 侧成功路径崩溃） | TableData/SchemaResult 原三/双数组形态 VM 崩、vue 错型 | 契约 v2：所有响应至多一个数组字段（columns/indexes 拆独立端点；cells 值,标志交错；query 列名头+ncols） | auto-api-gen（多数组响应解码）；契约 v2 已落地 |
+| G-6 | 前端 widget 的 Init 不会自动触发 store 的 Init——必须显式转发（`.Init -> { store.Init() }`），否则 store 侧初始化逻辑静默不执行 | VM E2E 钩子初版 vmE2E 恒空；补转发后立即生效 | app.at 已补转发（真实 bug 修复） | auto-ui 文档/生成器约定澄清；已规避 |
+| G-7 | VM 前端 store 无法读取进程环境（`use auto.env`/`env.get` 恒空）；VM MCP `autoui_snapshot` 第二次调用只返回头行；`autoui_type/autoui_action` 在高负载下偶发丢事件 | Init 钩子 env 版 vmE2E 恒空；ps 探针空快照；注入重试才稳 | VM 验证走 `tests/basic/tools/vm_e2e_hook.py`（Init 内确定性执行全链，状态经 MCP 读取）；快照复用首次结果 | auto-lang/auto-ui（VM env 通道、快照稳定性）；已规避 |
 
 其他观察（非阻塞）：a2r 发射器对 `str` 参数只对**局部变量**插引用，函数调用结果直传 `str` 形参
 会 E0308（probe.at 首版编译实证）——约定：先绑局部变量再传；`fs.delete` 有同 todo 仓 G-3 的
@@ -73,5 +77,17 @@ E0382 形态风险，本仓避免在语句位直接调用。
   无隐式连接残留。
 - **资源预算**：浏览页 10/25/50；控制台截断阈值 1000 行（显式 truncated 标注）；单查询无
   超时承诺（本地文件、只读、引擎快速失败），取消=前端停止等待（不中断已提交语句）。
+
+## 5. 实现后实测补充（2026-10-29，T-02..T-05）
+
+- API 电池 37/37（`python tests/basic/verify_basic.py --api-only`，独立 sqlite3 oracle 比对：
+  表/列/NULL/中文/CTE/聚合/搜索/排序逐值一致；V-02 失败路径无副作用；V-03 全部写拒绝+
+  sha256 不变；V-04 分页/截断/切库/句柄释放）。
+- Vue 端 Playwright 21/21（`--profile vue`，真实浏览器全用户链路，零页面错误）。
+- VM 端：MCP 事件注入在本机高负载下不可靠，改用 Init 钩子确定性执行
+  （`tests/basic/tools/vm_e2e_hook.py`），实测链路
+  `open:basic_a.db/4 q:success/3 rows rej:error b:basic_b.db/3 back:basic_a.db` 全通过，
+  状态经 autoui_state 读取（vmE2E 字段，常规运行恒空不影响 UI）。
+  注入式完整 UI 电池（vm_drive.py 21 项）保留为环境安静时的复验入口。
 
 —— 本文件为执行合同证据，随实现提交（*.md 证据摘要允许入库）。
