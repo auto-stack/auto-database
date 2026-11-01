@@ -325,8 +325,8 @@ widget App {
                                                     }
                                                 }
                                                 table-body {
-                                                    for ri, row in .store.qVals {
-                                                        table-row (key: ri) {
+                                                    for qi, row in .store.qVals {
+                                                        table-row (key: qi) {
                                                             for cell in row.vals {
                                                                 table-cell (text: cell, style: "text-xs px-2 py-1 font-mono whitespace-nowrap") {}
                                                             }

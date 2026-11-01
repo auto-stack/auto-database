@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-01
 updated_at: 2026-11-01
 plan_revision: 1
-current_step: 0
+current_step: 1
 total_steps: 8
 base_branch: main
 base_commit: 42be41d3827c021b4d72a7b894f3ac3aa8074cbd
@@ -101,7 +101,7 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 
 ## 8. 执行步骤
 
-- [ ] T-00（owner_stage=work；依赖001；AC-01/02）：确认无hook的真实输入/树链及工具身份，输出责任/支持/预算决策稿。
+- [x] T-00（owner_stage=work；依赖001；AC-01/02）：确认无hook的真实输入/树链及工具身份，输出责任/支持/预算决策稿。〔✅ 已完成 2026-11-02：docs/plans/evidence/002/native-ui-decision.md；§4 六hash相符；Init无hook（源码+运行态）；真实 type→WPathInput / find(button)→press→WOpenDb 全通（handler回执）；garbage错误分支渲染正常；发现 auto-ui-runtime iced投影 container.rs:291 结构翻转竞态（压测7/7 launch崩，open或close翻转），原生成功分支阻塞→owner前置；vm_drive click_by_text 误按Text节点实证→T-02修正；进程归属清理/冷106s暖4-40s/预算冻结；原始证据 plan-artifacts/plan-002/t00/〕
 - [ ] T-01（owner_stage=work；依赖T-00；AC-01）：收口独立准备/启动、隔离夹具/端口/进程身份和错误判定。
 - [ ] T-02（owner_stage=work；依赖T-00及确需实际前置；AC-02）：修driver/应用实证接缝；不改Init或走API预操作，只用真实可见UI事件。
 - [ ] T-03（owner_stage=work；依赖T-01/02；AC-02/03）：扩展既有vm_drive/调度器，跑D-02..04和Vue对应控制、独立只读/句柄oracle。
@@ -114,6 +114,8 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 
 - stage: new | plan_id: DATABASE-002 | plan_revision: 1 | outcome: pass（有界T-00准备就绪；本轮没有实现或产品验收） | next: work/T-00（等待后续实施指令）。
 - 已归档001、现实现Spec和产品源码保持不变；规划结构/链接通过不等于功能通过。review以同一clone的独立上下文核验，不自动创建agent/chat或指定模型。
+- stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 1 | from: drafting | to: work | status: drafting | outcome: pass | worktree: D:/autostack/auto-database（计划§2用户既定：独立clone即main，一app一写入者） | commit: 74b6d03 | next: work（授权链：/goal 完成计划002 → work/review/有界修复/merge 全程继承）。
+- stage: work | plan_id: DATABASE-002 | plan_revision: r1 | outcome: needs_fix（T-00完成；原生成功分支被框架竞态阻塞，受影响任务挂起owner前置） | worktree_path: D:/autostack/auto-database | branch: main | base_commit: 42be41d | code_commit: 74b6d03（本轮未改产品源码） | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）、auto-ui-tool 2026-11-01构建（auto-ui main 30c9027）、auto-lang 工作区源 | task_ids: T-00 | evidence: docs/plans/evidence/002/native-ui-decision.md（§4六hash相符；Init无hook；真实type/press handler回执全通；garbage错误分支正常；iced container.rs:291翻转竞态压测7/7崩→AC-02/03/04原生门挂auto-ui前置；driver Text误按实证） | blockers: 原生打开/关闭成功分支=auto-ui-runtime框架缺陷（计划§10：受影响任务保持未完成，T-05 handoff提出用户决策 a等修复/b缩减验收/c授权跨仓修复） | next_responsible_role: work（T-01/T-02不受影响部分继续）
 
 ## 10. 待澄清事项
 
