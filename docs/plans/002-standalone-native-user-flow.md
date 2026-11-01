@@ -73,7 +73,7 @@ T-00新增 `docs/plans/evidence/002/native-ui-decision.md`：固定源码/CLI/to
 
 | delta_id | add/modify/retire | docs/specs/... target | before/after rule | rationale | acceptance IDs |
 |---|---|---|---|---|---|
-| SD-01 | modify | docs/specs/database/basic-capabilities.md | §4 双端：VM 注入自驱描述 → 未改 Init 的真实 MCP 输入链（autoui_type/find(kind)/press 回执校验；错误分支与关闭态已证，成功分支受 auto-ui iced 投影翻转竞态阻塞，边界如实声明）；Vue=真实 UI 21 项（R001 键适配）；只读三层不变 | 按实测能力修订双端证据描述，不虚报 | AC-02/03/04 |
+| SD-01 | modify | docs/specs/database/basic-capabilities.md | §4 双端：VM 注入自驱描述 → 未改 Init 的真实 MCP 输入链（autoui_type/find/press 回执校验；树选择=标签行 press 派发组件 on_select 携项 id；错误分支与关闭态已证；成功分支=跨仓最小修复后 vm 门 59/59×2 全绿）；Vue=真实 UI 21 项（R001 键适配）；只读三层不变 | 按实测能力修订双端证据描述，不虚报 | AC-02/03/04 |
 | SD-02 | add | docs/specs/database/standalone-native-acceptance.md | 独立准备/启动正式门（错 tool 非零/占用端口干净失败/邻居失败不伤旁观）、进程归属纪律（spawn 树记录清理，禁端口/命令行启发）、调度方只读 oracle（fixture hash/哨兵行/请求间隙可重命名/无效路径不建文件/无 aux 副文件）、D-05 敏感性控制（错库断言总门非零、Init 注入 hash 护栏、确定性控制）；原生成功分支门在 auto-ui 修复后补齐 | 原生可重复运行与反注入证据的结构化合同 | AC-01/04 |
 
 ## 6. 测试设计
@@ -120,15 +120,20 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 1 | from: work | to: user | status: executing | outcome: waiting | worktree: D:/autostack/auto-database | commit: fa60a79 | next: user（§10 原生门决策 a/b/c；等待期间不跑阶段工作不做检查；收到答复后按 §9 stage map 续行）
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 2 | from: user | to: user | status: executing | outcome: waiting | worktree: D:/autostack/auto-database | commit: 7c2b675 | next: user（§10 仍无答复；按 §10 默认 a 挂 owner 前置——已记录于 §9/§10/README/roadmap+证据包 0eef0a2；T-06 路由决策=暂缓：AC-05 含"实际执行原生门"，原生门当前确定性失败（3 次一致 57/59），现在跑 T-06 必然失败且修复后修订必变、scoped pass 无法绑定 merge，故 T-06 推迟到原生门有结论（修复回归/b 缩减/c 授权修复）后执行；等待轮 2/3，再一轮无答复则 goal 记 blocked）
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 3 | from: user | to: blocked | status: executing | outcome: blocked | worktree: D:/autostack/auto-database | commit: f28e22c | next: user（第三等待轮无答复，goal 记 blocked。**确切问题=§10 原生门决策**：原生必需门被 auto-ui-runtime iced 投影翻转竞态阻塞（container.rs:291，压测 7/7 崩，vm 终门 3 次一致 57/59），其余全绿（vue 55/55 ×2、API 37/37、独立门/D-05 全绿）。解除动作三选一：a) 等 auto-ui 修复后回归 vm 门（默认已挂 owner 前置，修复复现见 docs/plans/evidence/002/native-ui-decision.md，可直接转 owner plan-026）；b) 明示缩减原生验收并修订计划；c) 授权跨仓最小修复。任一答复后由同目标恢复：a→修复回归→T-06→T-07；b→修订→T-06→T-07；c→修复→回归→T-06→T-07）
+- stage: work | plan_id: DATABASE-002 | plan_revision: r1 | outcome: pass（用户答复 c=授权跨仓最小修复；同轮完成修复+回归，原生门解除阻塞） | worktree_path: D:/autostack/auto-database | branch: main | base_commit: 42be41d | code_commit: 2d7a988（驱动适配；修复本体在 auto-ui fix-db002-uiflip） | dependency_revisions: auto-ui fix-db002-uiflip（基线 867819b=master；tool host sha256 df24b897…，RUST Backtrace 实证崩溃链）、auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7、auto-lang/auto-down/auto-web master 兄弟检出（fix 组 path 依赖） | task_ids: T-03/T-04/T-05 原生门收尾（§10 决议 c） | evidence: 根因=MaxWidthPct::operate 转发深一层（layout 直通却解引用 children().next()，内层 Container 收叶子节点→container.rs:291 unwrap；backtrace：column→container→row→max_width→container→max_width→container 崩，发生在 MCP LayoutCollector bounds 采集遍历——翻转后 MCP 轮询才崩、崩溃点漂移全吻合）+ P041-D1 根治补丁（crates/patches/iced_widget 0.14.2，2026-09-25 交付）PLAN-831/900 拆分时未随迁 auto-ui（auto-lang 注明"auto-ui 侧 [patch] 接管"未接；旧 CLI 链有补丁故 001 过、plan-890 后回归）。修复=max_width 直通转发+补丁挂载[patch.crates-io]（版本精确匹配）；本仓驱动适配=find_clickable 标签行定位（TreeView on_select 在容器级投影、行节点 press 回执 .TreeView.Select st/customers 实证）+SQL 步删模板清空（对齐 ui_drive.mjs）+switch-back-a 显式重选 customers（D-04 身份）+type_and_verify 5×1.5s。门：压测 2×8/8（原 0/8×2）；vm 59/59×2 连续（原 57/59×3）；vue 55/55 不回归 | blockers: 无（原生门全绿；worktree 构建 tool host 嵌组布局路径之边界已记录 §10，AUTO_WEB_ROOT pin 可控，非本计划范围） | next_responsible_role: review（T-06 最终复审，AC-05 实跑原生门）
 
 ## 10. 待澄清事项
 
-**2026-11-02 work 阶段交接：原生门需用户决策（阻塞项，唯一）**
+**2026-11-02 决议：§10 原生门决策已答复 = c（授权跨仓最小修复）→ 已实施并全绿，无剩余待澄清。**
 
-实测结论（证据：docs/plans/evidence/002/native-ui-decision.md + 冻结提交 0eef0a2 终门）：未改 Init 的原生真实输入链已打通至状态翻转（type/find/press 均有 handler 回执，错误分支/关闭态渲染正常），但 **auto-ui-runtime 的 VM iced 投影在 connected 翻转重渲染时竞态崩溃**（iced_widget container.rs:291，压测 7/7 launch 崩，打开或关闭翻转均可触发；同 app 源码在 001 时代旧 CLI 全链通过）。本计划不授权越仓改实现，原生必需门（AC-02 与 AC-03/04 的原生成功分支）保持未完成。已排除：窗口/驱动/app源码/Init注入/alpha样式/置脏逃生门。请决策：
+用户 2026-11-02 答复 c。同日完成（证据见 §9 round-4 work 收据）：
 
-- **a) 等 auto-ui 修复后回归原生门**（默认；计划保持 executing，修复建议最小复现已备：`auto run -r vm` + MCP type 路径 + press 打开/关闭）；owner 侧 plan-026（VM 驱动基础设施）正在进行，可顺路承接；
-- **b) 明示缩减原生验收**（改变 AC-02 目标，需明示并记录）；
-- **c) 授权跨仓最小修复**（超出本计划授权，需新授权范围）。
+- **根因一（auto-ui 源缺陷）**：`MaxWidthPct::operate` 转发深一层——该 widget `layout()` 为直通（返回 content 自身节点），`update/draw/mouse_interaction/overlay` 均直转，唯 operate 解引用 `layout.children().next()` 把 content 首子节点当 content 节点下传；内层 Container 收到叶子节点即触发 iced container.rs:291 unwrap。崩溃链（backtrace 实证）：`column → container → row → max_width → container → max_width → container(崩)`，发生在 MCP bounds 采集（LayoutCollector）遍历中——与"翻转后 MCP 轮询才崩、崩溃点漂移"完全吻合。
+- **根因二（补丁挂载丢失）**：P041-D1 族根治补丁（`crates/patches/iced_widget`，2026-09-25 交付）在 PLAN-831/900 仓拆分时未随迁 auto-ui（auto-lang Cargo.toml 注明"auto-ui 侧由其自身 [patch] 接管"但未接）；旧 CLI 构建链（auto-man path 直连）有补丁故 001 全过，plan-890 后 tool host 改由 auto-ui 工作区构建即回归。
+- **修复**：fix-db002-uiflip 分支（基线 867819b）＝max_width 直通转发 + 补丁 crate 复制挂载 `[patch.crates-io]`（版本精确匹配 0.14.2）+ Cargo.lock 重解析（组内兄弟实态）。
+- **本仓驱动适配**（同日）：vm_drive `find_clickable` 改标签行定位（TreeView on_select 投影在容器级、per-item press 需行节点携项 id——回执 `.TreeView.Select st/customers` 实证）；SQL 步删除模板清空（对齐 ui_drive.mjs）；switch-back-a 显式重选 customers（对齐 D-04 身份 oracle）；type_and_verify 放宽读回节奏。
+- **门结果**：压测 2 launch × 8/8（原 0/8×2）；`--profile vm` 59/59 ×2 连续（原 57/59 ×3）；`--profile vue` 55/55 不回归。
 
-其余无待澄清。归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
+已知边界（不影响本计划门）：worktree 构建的 tool host 会把构建期组布局的 auto-web 路径嵌入生成物（`AUTO_WEB_ROOT` 可钉死规范主检出，本轮回归均已带此 pin）——owner 仓可后续收口，非本计划范围。
+
+归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
