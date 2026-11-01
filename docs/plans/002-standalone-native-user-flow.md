@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-01
 updated_at: 2026-11-01
 plan_revision: 1
-current_step: 1
+current_step: 6
 total_steps: 8
 base_branch: main
 base_commit: 42be41d3827c021b4d72a7b894f3ac3aa8074cbd
@@ -73,8 +73,8 @@ T-00新增 `docs/plans/evidence/002/native-ui-decision.md`：固定源码/CLI/to
 
 | delta_id | add/modify/retire | docs/specs/... target | before/after rule | rationale | acceptance IDs |
 |---|---|---|---|---|---|
-| SD-01 | modify | docs/specs/database/basic-capabilities.md | VM注入自驱边界→未改Init的真实输入/树/SQL证据；只读不变 | 补真实用户操作验收 | AC-02/03/04 |
-| SD-02 | add | docs/specs/database/standalone-native-acceptance.md | 独立准备/工具身份/可见操作和永久门 | 原生可重复运行 | AC-01/04 |
+| SD-01 | modify | docs/specs/database/basic-capabilities.md | §4 双端：VM 注入自驱描述 → 未改 Init 的真实 MCP 输入链（autoui_type/find(kind)/press 回执校验；错误分支与关闭态已证，成功分支受 auto-ui iced 投影翻转竞态阻塞，边界如实声明）；Vue=真实 UI 21 项（R001 键适配）；只读三层不变 | 按实测能力修订双端证据描述，不虚报 | AC-02/03/04 |
+| SD-02 | add | docs/specs/database/standalone-native-acceptance.md | 独立准备/启动正式门（错 tool 非零/占用端口干净失败/邻居失败不伤旁观）、进程归属纪律（spawn 树记录清理，禁端口/命令行启发）、调度方只读 oracle（fixture hash/哨兵行/请求间隙可重命名/无效路径不建文件/无 aux 副文件）、D-05 敏感性控制（错库断言总门非零、Init 注入 hash 护栏、确定性控制）；原生成功分支门在 auto-ui 修复后补齐 | 原生可重复运行与反注入证据的结构化合同 | AC-01/04 |
 
 ## 6. 测试设计
 
@@ -101,12 +101,12 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 
 ## 8. 执行步骤
 
-- [x] T-00（owner_stage=work；依赖001；AC-01/02）：确认无hook的真实输入/树链及工具身份，输出责任/支持/预算决策稿。〔✅ 已完成 2026-11-02：docs/plans/evidence/002/native-ui-decision.md；§4 六hash相符；Init无hook（源码+运行态）；真实 type→WPathInput / find(button)→press→WOpenDb 全通（handler回执）；garbage错误分支渲染正常；发现 auto-ui-runtime iced投影 container.rs:291 结构翻转竞态（压测7/7 launch崩，open或close翻转），原生成功分支阻塞→owner前置；vm_drive click_by_text 误按Text节点实证→T-02修正；进程归属清理/冷106s暖4-40s/预算冻结；原始证据 plan-artifacts/plan-002/t00/〕
-- [ ] T-01（owner_stage=work；依赖T-00；AC-01）：收口独立准备/启动、隔离夹具/端口/进程身份和错误判定。
-- [ ] T-02（owner_stage=work；依赖T-00及确需实际前置；AC-02）：修driver/应用实证接缝；不改Init或走API预操作，只用真实可见UI事件。
-- [ ] T-03（owner_stage=work；依赖T-01/02；AC-02/03）：扩展既有vm_drive/调度器，跑D-02..04和Vue对应控制、独立只读/句柄oracle。
-- [ ] T-04（owner_stage=work；依赖T-03；AC-04）：跑D-01..05与原API/拒写门、真实故意失败控制，输出SD候选和无源码注入证据。
-- [ ] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖、README/roadmap，提交execution_done。
+- [x] T-00（owner_stage=work；依赖001；AC-01/02）：确认无hook的真实输入/树链及工具身份，输出责任/支持/预算决策稿。〔✅ 2026-11-02：docs/plans/evidence/002/native-ui-decision.md；§4 六hash相符；Init无hook；真实 type→WPathInput / find(button)→press→WOpenDb 全通（handler回执）；garbage错误分支正常；发现 auto-ui-runtime iced投影 container.rs:291 翻转竞态（压测7/7崩）→owner前置；vm_drive 误按Text节点实证；预算冻结〕
+- [x] T-01（owner_stage=work；依赖T-00；AC-01）：收口独立准备/启动、隔离夹具/端口/进程身份和错误判定。〔✅ verify_basic.py 重写：进程归属制（spawn树记录清理，无端口/命令行启发）、冷构建感知服务预算（2400s，竞态机实测20min+）、D-01电池（错tool rc=2/占用端口干净失败且不伤占用者/邻居失败旁观者存活）6/6；随机端口+隔离夹具+中文路径目录；tool-host瞬断重试收口〕
+- [x] T-02（owner_stage=work；依赖T-00及确需实际前置；AC-02）：修driver/应用实证接缝；不改Init或走API预操作，只用真实可见UI事件。〔✅ vm_drive.py 定位层重写（autoui_find(kind=button)+事件行clickable，禁文本就近猜id）+press回执校验+type送达校验；app.at 控制台表键 qi 适配新CLI R001（一行，语义不变）→Vue 21/21；未改Init/未用API代做输入〕
+- [x] T-03（owner_stage=work；依赖T-01/02；AC-02/03）：扩展既有vm_drive/调度器，跑D-02..04和Vue对应控制、独立只读/句柄oracle。〔✅ vm_drive 全链（输入/树/分页/搜索/NULL/Schema/SQL成功·拒绝·引擎错/坏路径/坏文件/切库B→A/关闭/同会话重开）+调度方oracle（hash前后/哨兵/间隙重命名/不建文件/无aux）；VM成功分支被框架翻转竞态阻塞，如实FAIL记录（见§10）；Vue对应控制全绿〕
+- [x] T-04（owner_stage=work；依赖T-03；AC-04）：跑D-01..05与原API/拒写门、真实故意失败控制，输出SD候选和无源码注入证据。〔✅ 冻结提交 0eef0a2 终门：--profile vue 55/55 exit0（API37+独立6+Vue21+oracle+D-05）；--profile vm 57/59（仅 vm-ui/vm-reopen=框架竞态，3次运行一致）；D-05 错库断言非零+Init注入hash护栏（a1fcad3a→异→还原）+控制全绿；SD候选见§5〕
+- [x] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖、README/roadmap，提交execution_done。〔✅ 漂移核对：未触文件hash不变（spec/db.at等），改动=3个计划内文件（0eef0a2）；D-01..05全部实际执行无skip；README/roadmap已更新；⚠ 交接形态=blocked（原生门待用户决策），非execution_done-pass——AC-02/03/04原生部分未完成，见§10〕
 - [ ] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审并实际执行原生门。
 - [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅本app规范/归档/提交push收尾。
 
@@ -116,7 +116,16 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - 已归档001、现实现Spec和产品源码保持不变；规划结构/链接通过不等于功能通过。review以同一clone的独立上下文核验，不自动创建agent/chat或指定模型。
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 1 | from: drafting | to: work | status: drafting | outcome: pass | worktree: D:/autostack/auto-database（计划§2用户既定：独立clone即main，一app一写入者） | commit: 74b6d03 | next: work（授权链：/goal 完成计划002 → work/review/有界修复/merge 全程继承）。
 - stage: work | plan_id: DATABASE-002 | plan_revision: r1 | outcome: needs_fix（T-00完成；原生成功分支被框架竞态阻塞，受影响任务挂起owner前置） | worktree_path: D:/autostack/auto-database | branch: main | base_commit: 42be41d | code_commit: 74b6d03（本轮未改产品源码） | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）、auto-ui-tool 2026-11-01构建（auto-ui main 30c9027）、auto-lang 工作区源 | task_ids: T-00 | evidence: docs/plans/evidence/002/native-ui-decision.md（§4六hash相符；Init无hook；真实type/press handler回执全通；garbage错误分支正常；iced container.rs:291翻转竞态压测7/7崩→AC-02/03/04原生门挂auto-ui前置；driver Text误按实证） | blockers: 原生打开/关闭成功分支=auto-ui-runtime框架缺陷（计划§10：受影响任务保持未完成，T-05 handoff提出用户决策 a等修复/b缩减验收/c授权跨仓修复） | next_responsible_role: work（T-01/T-02不受影响部分继续）
+- stage: work | plan_id: DATABASE-002 | plan_revision: r1 | outcome: blocked（T-01..T-05完成；AC-01全绿、AC-03 API/oracle侧全绿、AC-04 Vue+D-05全绿；AC-02与AC-03/04原生成功分支被 auto-ui iced 投影翻转竞态阻塞） | worktree_path: D:/autostack/auto-database | branch: main | base_commit: 42be41d | code_commit: 0eef0a2 | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7、auto-ui-tool 2026-11-01（auto-ui main 30c9027，owner plan-026 进行中）、auto-lang/auto-web 工作区源（本轮期间有漂移，竞态机两次复跑记录） | task_ids: T-01..T-05 | evidence: 冻结提交 0eef0a2 终门=--profile vue 55/55 exit0（API37+独立6+Vue21+oracle+D-05，两次独立运行一致）、--profile vm 57/59（仅 vm-ui/vm-reopen=框架竞态，三次运行一致）、D-05 注入hash护栏与错库反例全绿、独立/占用端口/旁观者 6/6；README/roadmap/§5 SD候选已按实际更新 | blockers: 原生门（AC-02/03/04 原生部分）待用户决策：a) 等 auto-ui 修复后回归（计划保持executing）b) 明示缩减原生验收 c) 授权跨仓最小修复——修复证据包已备（evidence/002 §3+t00/） | next_responsible_role: user（决策）→ 之后 review（T-06，仅当原生门有结论）
 
 ## 10. 待澄清事项
 
-当前没有需要用户重复确认的产品方向。技术不确定性由T-00记录真实证据、owner与依赖任务；若需要改变目标、削减必需验收或扩大跨仓写入范围，先明确报告，受影响任务保持未完成。归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
+**2026-11-02 work 阶段交接：原生门需用户决策（阻塞项，唯一）**
+
+实测结论（证据：docs/plans/evidence/002/native-ui-decision.md + 冻结提交 0eef0a2 终门）：未改 Init 的原生真实输入链已打通至状态翻转（type/find/press 均有 handler 回执，错误分支/关闭态渲染正常），但 **auto-ui-runtime 的 VM iced 投影在 connected 翻转重渲染时竞态崩溃**（iced_widget container.rs:291，压测 7/7 launch 崩，打开或关闭翻转均可触发；同 app 源码在 001 时代旧 CLI 全链通过）。本计划不授权越仓改实现，原生必需门（AC-02 与 AC-03/04 的原生成功分支）保持未完成。已排除：窗口/驱动/app源码/Init注入/alpha样式/置脏逃生门。请决策：
+
+- **a) 等 auto-ui 修复后回归原生门**（默认；计划保持 executing，修复建议最小复现已备：`auto run -r vm` + MCP type 路径 + press 打开/关闭）；owner 侧 plan-026（VM 驱动基础设施）正在进行，可顺路承接；
+- **b) 明示缩减原生验收**（改变 AC-02 目标，需明示并记录）；
+- **c) 授权跨仓最小修复**（超出本计划授权，需新授权范围）。
+
+其余无待澄清。归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
