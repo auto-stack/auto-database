@@ -90,9 +90,29 @@ class Mcp:
         return None
 
     def find_clickable(self, label, limit=8):
-        """非 button 可点元素（树行等）：取 autoui_find 祖先链中带事件回执
-        （onclick/on_select/on_toggle）的最深节点——直接 press 文本节点会报
+        """非 button 可点元素（树行等）：快照里按标签精确定位 text 节点，
+        回溯最近的包裹 `row #vnode_N {`（标签行）。press 该行即以具体项 id
+        派发组件 on_select（实测回执 `handler: .TreeView.Select st/customers`，
+        表切换生效）。
+
+        旧实现（find 祖先链取最深事件节点）在 002 修复后失效：TreeView 的
+        on_select/on_toggle 投影在整树容器级，per-item 事件在快照中只打
+        一次模板行（`onclick: .Select(r.id)`），祖先链里没有行级事件节点，
+        press 容器不带项 id＝无操作；直接 press 文本节点报
         `not valid for component type 'Text'`（T-00 实证）。"""
+        snap = self.snapshot()
+        if not isinstance(snap, str) or snap.startswith("HTTP-") or snap.startswith("PARSE"):
+            return None
+        lines = snap.splitlines()
+        pat = re.compile(r'text #vnode_\d+ "%s"' % re.escape(label))
+        for i, line in enumerate(lines):
+            if pat.search(line.strip()):
+                for j in range(i - 1, max(0, i - 15), -1):
+                    mm = re.search(r"row #vnode_(\d+) \{", lines[j])
+                    if mm:
+                        return "vnode_" + mm.group(1)
+                return None
+        # 回退：非树形可点元素走旧 find 祖先链逻辑
         f = self.find(label=label, limit=limit)
         if not isinstance(f, str) or f.startswith("HTTP-") or f.startswith("PARSE"):
             return None
@@ -142,12 +162,14 @@ class Mcp:
             s = s.replace("//", "/")
         return s.lower()
 
-    def type_and_verify(self, eid, text, store_field, attempts=3):
-        """type 后读 store 字段确认真实送达（001 教训：回显≠送达）。"""
+    def type_and_verify(self, eid, text, store_field, attempts=5):
+        """type 后读 store 字段确认真实送达（001 教训：回显≠送达）。
+        attempts=5/1.5s：VM 首次 type 的 store 应用可滞后于即时读
+        （002 门实测：3×1.0s 全空、1.5s 后已达），放宽读回节奏。"""
         last = ""
         for _ in range(attempts):
             resp = self.type(eid, text)
-            time.sleep(1.0)
+            time.sleep(1.5)
             st = self.state(store_field)
             if "HTTP-" in st[:6] or "PARSE" in st[:6]:
                 last = st[:80]
@@ -273,15 +295,15 @@ def main():
     record("schema-ddl", "CREATE TABLE 客户资料" in snap, "real DDL")
 
     # ── 5. SQL 控制台：成功/拒绝/引擎错（D-02/D-03） ──
+    # （与 ui_drive.mjs 同构：GROUP BY 模板按钮填充后直接 Run；
+    #   原 type(sql_id, "") 会把模板清空→空 SQL 报错，2026-11-02 修复）
     ok, resp = m.press_button("SQL")
     time.sleep(0.8)
     snap = m.snapshot()
     sql_inputs = re.findall(r"input #(\S+)", snap)
     sql_id = sql_inputs[-1] if sql_inputs else None
     ok, resp = m.press_button("GROUP BY")
-    if sql_id:
-        m.type(sql_id, "")
-        time.sleep(0.3)
+    time.sleep(0.8)
     ok, resp = m.press_button("▶ Run SQL")
     st = m.wait_state('sqlStatus: "success"', ("sqlStatus", "sqlMeta"), timeout_s=20)
     record("sql-agg-ok", 'sqlStatus: "success"' in st, st.replace("\n", " | ")[:150])
@@ -338,7 +360,13 @@ def main():
         m.type(pid2, db_a)
         time.sleep(0.5)
     ok, resp = m.press_button("打开")
-    time.sleep(2.5)
+    st = m.wait_state("basic_a.db", ("connected", "file_name"), timeout_s=40)
+    # 切库后选中表重置为默认（字母序 audit_logs）——与 ui_drive.mjs 同构，
+    # 显式重选 customers 再验内容身份（不看默认表名假绿，D-04 oracle）。
+    node = m.find_clickable("customers")
+    if node:
+        m.press(node)
+        time.sleep(2)
     snap = m.snapshot()
     record("switch-back-a", "basic_a.db" in snap and "Alfreds Futterkiste" in snap,
            "db A restored (identity by content)")
