@@ -18,3 +18,6 @@ __pycache__/
 
 # AutoOS 运行时账本目录：specs.json 已迁移 AutoDown（PLAN-107），本地保留只读副本作回滚依据
 .autoos/
+
+# plan evidence scratch must stay out of Git (2026-10-31 ruling backstop)
+docs/plans/attachments/

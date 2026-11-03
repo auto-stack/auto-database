@@ -37,10 +37,13 @@
 
 - 大结果：浏览分页有界（页大小 ≤200）；控制台 >1000 行截断并标注 truncated。
 - 句柄：查询失败/切库/关闭不泄漏文件锁（每请求 RAII）。
-- 双端：vue（Playwright 驱动，verify_basic.py --profile vue 全链路 21 项）与
-  vm（VM 解释器内以 Init 自驱钩子确定性执行同一链路——tests/basic/tools/
-  vm_e2e_hook.py 临时改写 .Init，状态经 AutoUI MCP autoui_state 读取；注入式
-  21 项电池为环境安静时的复验入口）完成 打开→浏览→错误→切库。
+- 双端：vue（Playwright 驱动，verify_basic.py --profile vue 真实 UI 全链 21 项，
+  R001 键适配）与 vm（未改 .Init 的真实 MCP 输入链——autoui_type 路径输入送达
+  校验、autoui_find(kind=button) 定位真实 Button/标签行 vnode、autoui_press 派发
+  并校验 handler 回执；树选择=标签行 press 经组件 on_select 携项 id；成功分支经
+  auto-ui 跨仓最小修复后 vm 门 59 项全绿；错误/关闭态分支已证）完成
+  打开→浏览→SQL→错误→切库→关闭→重开。tests/basic/tools/vm_e2e_hook.py 仅保留
+  为 D-05 受控注入反例与历史诊断，不作为成功路径。
 
 - NULL 单元格统一显示为文本 "NULL"（与字面 "NULL" 值视觉不可分；API 层以独立
   nulls 标志区分，oracle 比对不受影响）。
