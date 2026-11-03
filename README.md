@@ -31,14 +31,15 @@ AutoOS 通过 [`apps/auto-database`](https://github.com/auto-stack/auto-os/tree/
 开发使用独立 clone `D:/autostack/auto-database` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。
 
 
-## 当前后续计划（2026-11-02）
+## 当前后续计划（2026-11-03）
 
-[DATABASE-002：原生真实操作与独立运行验收](docs/plans/002-standalone-native-user-flow.md) 为 **executing/r1、实施中（T-00..T-04 完成，T-05 收尾）**。实测结论（证据：[evidence/002 决策稿](docs/plans/evidence/002/native-ui-decision.md)）：
+[DATABASE-002：原生真实操作与独立运行验收](docs/plans/002-standalone-native-user-flow.md) 为 **executing/r1、收尾（T-00..T-06 完成，merge 归档前）**。实测结论（证据：[evidence/002 决策稿](docs/plans/evidence/002/native-ui-decision.md)；T-06 复审收据见计划 §9）：
 
 - **API/拒写门 37/37 保持全绿**；独立准备/启动门（错tool/端口占用/邻居失败旁观者）全绿；D-05 敏感性控制（错库断言非零、Init 注入 hash 护栏、确定性控制）全绿。
-- **Vue 轨修复并全绿（21/21，含 UI 全链 55/55）**：新 CLI 生成器 R001 拒绝两表 `:key="ri"` 重名，控制台表循环变量改 `qi`（一行，语义不变）。
-- **原生轨阻塞在框架缺陷**：未改 Init 的真实输入/打开/关闭驱动链已打通至状态翻转（type→WPathInput、find(button)→press→WOpenDb 均有 handler 回执），但 auto-ui-runtime iced 投影在 connected 翻转重渲染时 `container.rs:291` 竞态崩溃（压测 7/7 launch 崩）→ **挂 auto-ui owner 前置**，原生必需门（AC-02/03/04 原生部分）保持未完成，待用户决策（等修复/缩减验收/授权跨仓修复）。
-- 进程纪律已换归属制：只按本次 spawn 树记录清理，不凭端口/命令行相似杀进程；失败/占用端口不伤旁观实例。
+- **Vue 轨全绿（21/21，UI 全链 55/55）**：新 CLI 生成器 R001 拒绝两表 `:key="ri"` 重名，控制台表循环变量改 `qi`（一行，语义不变）。
+- **原生轨已解除阻塞并全绿（计划 §10 决议 c，2026-11-02）**：跨仓最小修复 auto-ui master 76b0340（iced MaxWidthPct operate 转发缺陷 + P041-D1 补丁挂载回迁）+ 本仓驱动适配（2d7a988）；未改 Init 的真实输入/树/SQL/切库/关闭/重开链 vm 59/59（work ×2 + T-06 复审 ×1）、vue 55/55 不回归。
+- 进程纪律为归属制：只按本次 spawn 树记录清理，不凭端口/命令行相似杀进程；失败/占用端口不伤旁观实例。
+- 共享工具链注意（T-06 F-2）：auto-lang b90a18996 后 release 生成消费者构建对机器负载边际敏感，落地复跑原生门须择安静窗口。
 
 先T-00核验实际源码/CLI/编译或渲染tool、已有SDK、冷准备与失败边界；实证缺项才转实际owner最小前置。既有测试入口继续复用，历史绿总数不能替代新必需UI操作。只用隔离数据/本次进程；不清共享target或终止用户实例。无实证业务缺口时不为完成计划强改业务源码。
 
