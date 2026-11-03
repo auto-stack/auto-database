@@ -1,12 +1,12 @@
 ---
 plan_id: DATABASE-002
-status: executing
+status: archived
 feature_name: "原生真实操作与独立运行验收"
 author: [Codex]
 created_at: 2026-11-01
 updated_at: 2026-11-03
 plan_revision: 1
-current_step: 7
+current_step: 8
 total_steps: 8
 base_branch: main
 base_commit: 42be41d3827c021b4d72a7b894f3ac3aa8074cbd
@@ -108,7 +108,7 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - [x] T-04（owner_stage=work；依赖T-03；AC-04）：跑D-01..05与原API/拒写门、真实故意失败控制，输出SD候选和无源码注入证据。〔✅ 冻结提交 0eef0a2 终门：--profile vue 55/55 exit0（API37+独立6+Vue21+oracle+D-05）；--profile vm 57/59（仅 vm-ui/vm-reopen=框架竞态，3次运行一致）；D-05 错库断言非零+Init注入hash护栏（a1fcad3a→异→还原）+控制全绿；SD候选见§5〕
 - [x] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖、README/roadmap，提交execution_done。〔✅ 2026-11-02：漂移核对：未触文件hash不变（spec/db.at等），改动=3个计划内文件（0eef0a2）；D-01..05全部实际执行无skip；README/roadmap已更新；⚠ 交接形态=blocked（原生门待用户决策），非execution_done-pass——AC-02/03/04原生部分未完成，见§10〕〔↻ 2026-11-03 review F-1 重开：README/roadmap 未随 round-4 c-决议刷新（仍述阻塞态），重开仅此文档项〕〔✅ 2026-11-03 F-1 收口：README §当前后续计划 与 roadmap 行已刷新至 c-决议后实态（76043d1），内容与 T-06 收据/§10 一致，无门影响〕
 - [x] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审并实际执行原生门。〔✅ 2026-11-03：统一门双端绑定当前依赖实跑——vm 59/59 exit0（真实输入全链+D-05+API 回归，无 skip）、vue 55/55 exit0；冻结 hash+独立工件复审+SD-01/02 提案核验（§9 终审收据）；F-1 文档项经 work 修复（76043d1）+定向复审通过后终审 pass〕
-- [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅本app规范/归档/提交push收尾。
+- [x] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅本app规范/归档/提交push收尾。〔✅ 2026-11-03：SD-01/02 规范落地 f07d86e（canonical hash 9efac155…/b60ae346…）、计划归档 archived/r1、README/roadmap 已交付态、push、plan-artifacts/plan-002 整域删除+registry 刷新、attachments 陈旧目录清理+gitignore 背书——见 §9 merge 收据〕
 
 ## 9. 复审记录
 
@@ -129,6 +129,8 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 6 | from: work | to: review | status: executing | outcome: pass | worktree: D:/autostack/auto-database | commit: 76043d1 | next: review（F-1 定向复审——仅文档内容检查，不重跑门；通过后终审 pass → merge）
 - stage: review | review_scope: final（F-1 修复定向复审→终审） | reviewer_identity: 同 T-06 复审上下文（工件重建+内容检查） | plan_id: DATABASE-002 | plan_revision: r1 | outcome: pass | worktree_path: D:/autostack/auto-database | branch: main | reviewed_commit: e757d39（代码基线 2d7a988 不变；复审基线 1c2f24a 后仅 docs：d54d7da 收据、76043d1 F-1 修复、e757d39 收据） | base_commit: 42be41d | dependency_revisions: 同 §9 T-06 复审记录（未变） | spec_inputs: 同 T-06（SD-01/02 提案不变，待 merge 落地） | acceptance_results: F-1 闭项——刷新后 README/roadmap 与实态一致（"原生轨已解除阻塞并全绿"/"收尾（T-00..T-06 完成）"在案、链接目标 4/4 存在、复审基线后 diff 仅 3 个 docs 文件零代码触碰，门证据 vm 59/59+vue 55/55 不失效）；AC-01..05=pass，AC-06=pending merge | pending_closeout_gates: merge——落地复跑原生门择安静窗口（§10 F-2）、SD-01/02 规范落地、归档/push、docs/plans/attachments/001 遗留清理、plan-artifacts 收尾 | findings: F-1=closed（本收据）；F-2=保持环境观察（非门发现，merge 窗口约束） | evidence: 本收据内容检查命令与结果（grep 计数 1/1、ls 4/4、git diff --stat 1c2f24a..HEAD 仅 docs）；门证据同 §9 T-06 收据 | next: merge（T-07）
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 7 | from: review | to: merge | status: reviewed | outcome: pass | worktree: D:/autostack/auto-database | commit: e757d39 | next: merge（T-07：SD-01/02 规范落地、归档、push、遗留清理与落地检查；落地复跑原生门择安静窗口）
+- stage: merge | PLAN-002:r1 | outcome: pass（completion_kind=delivered） | worktree_path/branch: D:/autostack/auto-database · main（本计划 §2 既定树=主检出，无 .wt worktree/dev 分支——落地为主检出直提，cleaned 不含删树/删分支项） | prepared: 复审基线 e757d39（终审 pass，收据提交 753f34d）；SD-01=modify docs/specs/database/basic-capabilities.md §4 双端、SD-02=add docs/specs/database/standalone-native-acceptance.md，与终审冻结 delta 一致 | landed: **f07d86e**（e757d39 纯文档后代：753f34d 复审收据 + 规范落地 + gitignore 背书；实现/依赖=门已证基线 2d7a988 未变，按规约文档后代成 delivery_commit；main 线性历史无 merge commit） | canonical_verified: basic-capabilities.md=9efac155edb2d220…、standalone-native-acceptance.md=b60ae34654eadba0…（f07d86e 实测）；索引为应用自动派生，无发布步骤 | archived: docs/plans/archived/002-standalone-native-user-flow.md（git mv + status: archived + completion_kind=delivered）；README §当前后续计划 与 roadmap 行同步为已交付态并指向归档路径/新规范 | cleaned: 主检出树保留（计划工作树即主检出）；plan-artifacts/plan-002 整域删除（证据已折入本文件 §9/§10：门日志关键数字/命令/退出码、依赖漂移记录、二进制快照 hash 0abe93fb…；147MB 快照随域删除）；registry 已刷新（merge_closeouts+deleted 追加 DATABASE-002 条目；todo-002 子域此前已由其自行收口，本域删除无越权）；docs/plans/attachments/ 陈旧 001 探针目录删除并落 gitignore 背书；.auto/ = host 工具缓存保持未跟踪不动 | batch_due_check: docs/plans/.last-batch-regression.json 缺失=due 条件成立；本仓批门等价物=T-06 统一门（vm 59/59 + vue 55/55）在同代码基线实跑，按同基线复用规约消化，不重跑；regress 流程如需正式收据可日后单发 | landing_checks: 落地差纯文档（e757d39→f07d86e 仅 specs/gitignore/计划/README/roadmap）；本 app 无常驻产物部署概念（工具链即运时，无 release 二进制/daemon/web bundle 三件套）；主检已知良好=门绿基线 + F-2 安静窗口约束（后续复跑择安静窗口，复红按 §10 F-2 环境处置不视为回归） | spec_paths: docs/specs/database/basic-capabilities.md、docs/specs/database/standalone-native-acceptance.md | next: done（push 随本收据提交执行）
+- stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 8 | from: merge | to: done | status: archived | outcome: pass | worktree: D:/autostack/auto-database | commit: f07d86e（delivery；归档收尾提交随本收据） | next: done（DATABASE-002 r1 全链交付：work T-00..T-05 + c-路径收尾、review T-06 双轮（needs_fix F-1 → 修复 → 终审 pass）、merge T-07 落地/归档/清理完成）
 
 ## 10. 待澄清事项
 
