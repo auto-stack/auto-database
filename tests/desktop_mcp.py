@@ -239,7 +239,12 @@ def main():
 
     proc = launch(port)
     try:
-        if not wait_for_server(url, timeout=15):
+        # PLAN-056 T-03 harness adaptation: on the os-056 toolchain the VM
+        # run regenerates front+back every boot (ui-cache fingerprint never
+        # re-stamped; pre-existing) and cold back builds take minutes
+        # (measured 20s warm to ~350s cold, 2026-11-03). 15s could not
+        # observe MCP even warm; bounded bump to 300s. Checks unchanged.
+        if not wait_for_server(url, timeout=300):
             print(f"[ERROR] MCP server did not start on port {port}")
             sys.exit(1)
 

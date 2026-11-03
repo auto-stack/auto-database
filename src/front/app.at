@@ -8,6 +8,10 @@
 
 use db_store: DbStore
 use components.tree_util: filter_tree, collect_ids, toggle_id
+// PLAN-056 T-03：官方主题包主题名导入（031 合同消费面——`dep themes` 声明
+// 使包可解析，本 use 把包内 pub 主题收进收集链；无此行 themes 树不注册，
+// design.theme/follow 宿主候选都会在 C-11 未注册拒绝）。
+use themes.themes: Auto
 
 widget App {
     use { package: official from "./components" }
@@ -48,6 +52,18 @@ widget App {
         .WPresetAgg -> { store.PresetAgg() }
         .WPresetCte -> { store.PresetCte() }
         .WPresetReject -> { store.PresetReject() }
+    }
+
+    // PLAN-056 T-03：主题设计默认（独立默认腿）。theme="Auto" 经 pac
+    // `dep themes`（vendor/themes 固定快照）注册的官方树解析。本产品无
+    // dark_mode 状态位/明暗切换，独立默认腿取静态 light（原无 theme 键、
+    // token 类默认浅色语义不变）；桌面内宿主策略完整快照（family+mode）
+    // 按 031 full-host 语义整体接管（follow）。对象树/DataTable/SQL 控制台
+    // 为语义 token 类，族内明暗由 token 切换承接；数据内容/DDL/查询结果
+    // 文本不随主题染色。隔离 SQLite 副本只读消费、原拒写门原样。
+    design {
+        theme: "Auto"
+        mode: "light"
     }
 
     view {
