@@ -1,10 +1,10 @@
 ---
 plan_id: DATABASE-002
-status: drafting
+status: executing
 feature_name: "原生真实操作与独立运行验收"
 author: [Codex]
 created_at: 2026-11-01
-updated_at: 2026-11-01
+updated_at: 2026-11-03
 plan_revision: 1
 current_step: 6
 total_steps: 8
@@ -106,7 +106,7 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - [x] T-02（owner_stage=work；依赖T-00及确需实际前置；AC-02）：修driver/应用实证接缝；不改Init或走API预操作，只用真实可见UI事件。〔✅ vm_drive.py 定位层重写（autoui_find(kind=button)+事件行clickable，禁文本就近猜id）+press回执校验+type送达校验；app.at 控制台表键 qi 适配新CLI R001（一行，语义不变）→Vue 21/21；未改Init/未用API代做输入〕
 - [x] T-03（owner_stage=work；依赖T-01/02；AC-02/03）：扩展既有vm_drive/调度器，跑D-02..04和Vue对应控制、独立只读/句柄oracle。〔✅ vm_drive 全链（输入/树/分页/搜索/NULL/Schema/SQL成功·拒绝·引擎错/坏路径/坏文件/切库B→A/关闭/同会话重开）+调度方oracle（hash前后/哨兵/间隙重命名/不建文件/无aux）；VM成功分支被框架翻转竞态阻塞，如实FAIL记录（见§10）；Vue对应控制全绿〕
 - [x] T-04（owner_stage=work；依赖T-03；AC-04）：跑D-01..05与原API/拒写门、真实故意失败控制，输出SD候选和无源码注入证据。〔✅ 冻结提交 0eef0a2 终门：--profile vue 55/55 exit0（API37+独立6+Vue21+oracle+D-05）；--profile vm 57/59（仅 vm-ui/vm-reopen=框架竞态，3次运行一致）；D-05 错库断言非零+Init注入hash护栏（a1fcad3a→异→还原）+控制全绿；SD候选见§5〕
-- [x] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖、README/roadmap，提交execution_done。〔✅ 漂移核对：未触文件hash不变（spec/db.at等），改动=3个计划内文件（0eef0a2）；D-01..05全部实际执行无skip；README/roadmap已更新；⚠ 交接形态=blocked（原生门待用户决策），非execution_done-pass——AC-02/03/04原生部分未完成，见§10〕
+- [ ] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖、README/roadmap，提交execution_done。〔✅ 2026-11-02：漂移核对：未触文件hash不变（spec/db.at等），改动=3个计划内文件（0eef0a2）；D-01..05全部实际执行无skip；README/roadmap已更新；⚠ 交接形态=blocked（原生门待用户决策），非execution_done-pass——AC-02/03/04原生部分未完成，见§10〕〔↻ 2026-11-03 review F-1 重开：README/roadmap 未随 round-4 c-决议刷新（仍述阻塞态），重开仅此文档项，其余已完成部分保留〕
 - [ ] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审并实际执行原生门。
 - [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅本app规范/归档/提交push收尾。
 
@@ -122,6 +122,8 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 3 | from: user | to: blocked | status: executing | outcome: blocked | worktree: D:/autostack/auto-database | commit: f28e22c | next: user（第三等待轮无答复，goal 记 blocked。**确切问题=§10 原生门决策**：原生必需门被 auto-ui-runtime iced 投影翻转竞态阻塞（container.rs:291，压测 7/7 崩，vm 终门 3 次一致 57/59），其余全绿（vue 55/55 ×2、API 37/37、独立门/D-05 全绿）。解除动作三选一：a) 等 auto-ui 修复后回归 vm 门（默认已挂 owner 前置，修复复现见 docs/plans/evidence/002/native-ui-decision.md，可直接转 owner plan-026）；b) 明示缩减原生验收并修订计划；c) 授权跨仓最小修复。任一答复后由同目标恢复：a→修复回归→T-06→T-07；b→修订→T-06→T-07；c→修复→回归→T-06→T-07）
 - stage: work | plan_id: DATABASE-002 | plan_revision: r1 | outcome: pass（用户答复 c=授权跨仓最小修复；同轮完成修复+回归，原生门解除阻塞） | worktree_path: D:/autostack/auto-database | branch: main | base_commit: 42be41d | code_commit: 2d7a988（驱动适配；修复本体在 auto-ui fix-db002-uiflip） | dependency_revisions: auto-ui fix-db002-uiflip（基线 867819b=master；tool host sha256 df24b897…，RUST Backtrace 实证崩溃链）、auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7、auto-lang/auto-down/auto-web master 兄弟检出（fix 组 path 依赖） | task_ids: T-03/T-04/T-05 原生门收尾（§10 决议 c） | evidence: 根因=MaxWidthPct::operate 转发深一层（layout 直通却解引用 children().next()，内层 Container 收叶子节点→container.rs:291 unwrap；backtrace：column→container→row→max_width→container→max_width→container 崩，发生在 MCP LayoutCollector bounds 采集遍历——翻转后 MCP 轮询才崩、崩溃点漂移全吻合）+ P041-D1 根治补丁（crates/patches/iced_widget 0.14.2，2026-09-25 交付）PLAN-831/900 拆分时未随迁 auto-ui（auto-lang 注明"auto-ui 侧 [patch] 接管"未接；旧 CLI 链有补丁故 001 过、plan-890 后回归）。修复=max_width 直通转发+补丁挂载[patch.crates-io]（版本精确匹配）；本仓驱动适配=find_clickable 标签行定位（TreeView on_select 在容器级投影、行节点 press 回执 .TreeView.Select st/customers 实证）+SQL 步删模板清空（对齐 ui_drive.mjs）+switch-back-a 显式重选 customers（D-04 身份）+type_and_verify 5×1.5s。门：压测 2×8/8（原 0/8×2）；vm 59/59×2 连续（原 57/59×3）；vue 55/55 不回归 | blockers: 无（原生门全绿；worktree 构建 tool host 嵌组布局路径之边界已记录 §10，AUTO_WEB_ROOT pin 可控，非本计划范围） | next_responsible_role: review（T-06 最终复审，AC-05 实跑原生门）
 - stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 4 | from: blocked | to: review | status: executing | outcome: pass | worktree: D:/autostack/auto-database | commit: ebdbc26（fix 2d7a988 + 文档收口） | next: review（T-06 最终复审）。owner 侧落点补充：auto-ui 修复分支 0bda4d4 → rebase 到 plan-028 交付后的 master（d4dc8bd）→ **ff 折回 master = 76b0340**；共享二进制 `D:/autostack/auto-ui/target/debug/auto-ui-tool.exe` 已从 master 重建（sha256 979cd066…）并**无 pin** 压测 2×4/4 验证（canonical 消费形态）；owner 工作区 lib 测试 2529 过，并行 VM 轨失败族（24 nextest/18 libtest）在 master 与修复分支同等复现、串行双端全绿=既有环境噪声非本改引入；fix 组 worktree 已守卫清理。T-06 复审以共享二进制（canonical）实跑原生门即可，无需 pin
+- stage: review | review_scope: final | reviewer_identity: auto-plan-goal 会话独立上下文（本轮自 durable artifacts 重建状态，非实现上下文；未建第二 checkout/第二模型——limitation 如实录：与 goal 编排同会话谱系，独立性以工件重建+自跑门证据支撑） | plan_id: DATABASE-002 | plan_revision: r1 | outcome: needs_fix（唯一发现 F-1 文档项；门与 AC-01..05 实证全绿） | worktree_path: D:/autostack/auto-database | branch: main | reviewed_commit: 1c2f24a（代码基线 2d7a988 未变，其后仅本计划 docs） | base_commit: 42be41d | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-14-g47d8f7b（较 round-3 记录 t19-5-g55c98c7 漂移）、tool host auto-ui-tool.exe sha256 0abe93fb…（11-03 13:32 并行会话重建，出处 auto-ui master cb356bdb+当日脏文件；round-4 记录 979cd066 已被覆盖，快照留存 plan-artifacts/plan-002/review/）、auto-lang master=b90a18996+docs（11-03 11:14 feat 落地，round-4 绿门后唯一 crates 变更）、rustc 1.98.0(88d9e12ae) 未变；auto-ui 76b0340 修复经 merge-base 核验仍在 master 祖先链 | spec_inputs: docs/specs/database/basic-capabilities.md=510ddab5 未动（SD-01/02 为提案待 merge 落地；§4 现行"Init 注入自驱"描述与 SD-01 before 主张相符；SD-02 所列机制在 verify_basic.py/vm_drive.py 在位并经门实证）；src/front/app.at ri→qi 一行重命名核为合同内 CLI-R001 适配（零语义，T-02 披露，不触 Init/不改生成物） | acceptance_results: AC-01..04=pass——本轮统一门双端绑定当前依赖实跑：--profile vm 59/59 exit0（真实输入全链：type→WPathInput/press→WOpenDb·WCloseDb handler 回执、树选择、分页/搜索/NULL/Schema、SQL 成功·拒绝·引擎错、坏路径/坏文件横幅、切库 B→A 内容身份、关闭后存活、重开再查询、D-05 注入 hash 护栏与错库总门非零、API v01..v04、句柄/hash/无aux oracle，无 skip）；--profile vue 55/55 exit0；run1=6/4、run2=7/3 为共享工具链负载敏感噪声（§10 F-2，安静窗口复绿）；AC-05=pass（冻结 hash+独立工件复审+双端实跑门）；AC-06=pending merge | pending_closeout_gates: work——F-1 修复+定向内容复审；merge——落地复跑原生门须安静窗口（F-2）、SD-01/02 规范落地、归档/push、docs/plans/attachments/001 遗留清理 | findings: F-1(P2, closeout 文档, 触 AC-04"SD/README 符合实际")：README.md §"当前后续计划(2026-11-02)" 与 docs/roadmap-v0.6.md:8 仍述 round-3 阻塞态（"原生轨阻塞…待用户决策"），未随 §10 c-决议刷新——T-05 重开仅此文档项，修复后按文档级内容检查定向复审（不重跑门） | evidence: plan-artifacts/plan-002/review/{t06-vm-gate.log, t06-vm-gate-retry.log, t06-vm-gate-run3.log, t06-vue-gate.log, rustc-repro-result.txt, auto-ui-tool.snapshot-0abe93fb.exe}（rustc-repro 为直接 rustc 重放探针：绕过 build.rs 缺生成常量 BUILD_INPUTS→E0425×26，属无效探针单独分类，不作门证据） | next: work（F-1 文档级修复）
+- stage: goal | plan_id: DATABASE-002 | plan_revision: r1 | round: 5 | from: review | to: work | status: executing | outcome: needs_fix | worktree: D:/autostack/auto-database | commit: 1c2f24a（复审基线；门证据于 plan-artifacts） | next: work（F-1：README/roadmap 刷新至 c-决议后实态；文档级修复后定向复审，随后 merge）
 
 ## 10. 待澄清事项
 
@@ -136,5 +138,10 @@ D用例均owner_stage=work，由T-03/T-04使既有入口真正覆盖；原API/�
 - **门结果**：压测 2 launch × 8/8（原 0/8×2）；`--profile vm` 59/59 ×2 连续（原 57/59 ×3）；`--profile vue` 55/55 不回归。
 
 已知边界（不影响本计划门）：worktree 构建的 tool host 会把构建期组布局的 auto-web 路径嵌入生成物（`AUTO_WEB_ROOT` 可钉死规范主检出，本轮回归均已带此 pin）——owner 仓可后续收口，非本计划范围。
+
+**2026-11-03 T-06 复审补充（append-only）：F-1 文档项 + F-2 共享工具链敏感观察。复审门实证 vm 59/59 + vue 55/55（当前依赖绑定、安静窗口），AC-01..05 全绿；未结项仅 F-1。**
+
+- **F-1（needs_fix 唯一发现，P2 文档）**：README.md §"当前后续计划(2026-11-02)" 与 docs/roadmap-v0.6.md:8 仍述 round-3 阻塞态（"原生轨阻塞…待用户决策"），未随 §10 c-决议（2026-11-02，修复落地+门全绿）刷新；AC-04"SD/README符合实际"文档条款未满足。处置：work 文档级修复（T-05 重开仅此项）→ 定向内容复审 → merge（roadmap 行随归档态再更新）。
+- **F-2（共享依赖环境观察，非本仓缺陷、非门发现）**：round-4 绿门（11-02）后依赖漂移：auto CLI t19-5→t19-14、tool host 979cd066→0abe93fb（11-03 13:32 并行重建，出处 auto-ui master cb356bdb+当日脏文件，round-4 二进制已被覆盖；快照留存 plan-artifacts/plan-002/review/）、auto-lang master 11-03 11:14 落地 b90a18996（Plan 921 T-09/10/11：新增 auto-lang-core/src/test_cases/ac_a2c_hir.rs、mod.rs、auto-test-case/contract.rs）。此后 release 生成消费者构建编译 auto-lang-core 时 rustc mir_borrowck 间歇性栈溢出（STATUS_STACK_BUFFER_OVERRUN, exit 101）：11-03 09:25 同 context 成功 rlib 在案 → 11:14 后 T-06 前两跑 backend 依赖项 4/10、3/10 失败（并行构建风暴中/尾声），安静窗口第三跑 vm 59/59 + vue 55/55 全绿——失败与机器负载相关，属边际型敏感而非确定性损坏；owner（Plan 921 语音）debug 门绿、release 消费者路径受扰未被其察觉。**merge 落地复跑原生门须择安静窗口；若复红按本节处置再议，不视为 002 回归。**
 
 归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
