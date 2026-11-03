@@ -5,7 +5,7 @@
 | 顺序 | 计划/成果 | 当前状态与边界 |
 |---|---|---|
 | 基础 | [001首轮能力](plans/archived/001-real-sqlite-browser.md) | 001已交付归档/r2、7/7，API37/37与Vue21项；原生链使用临时Init自驱注入再读态，覆盖边界保留。 |
-| 当前优先 | [DATABASE-002：原生真实操作与独立运行验收](plans/002-standalone-native-user-flow.md) | executing/r1 收尾（T-00..T-06 完成）：§10 决议 c 跨仓最小修复（auto-ui master 76b0340 + 驱动适配 2d7a988）后原生门全绿——API37/37、独立启动门、D-05控制全绿，vm 59/59（work×2+T-06复审×1）、vue 55/55；T-06 F-1 文档项修复后进入 merge 归档；落地复跑门择安静窗口（F-2）。证据：plans/evidence/002/native-ui-decision.md |
+| 已交付 | [DATABASE-002：原生真实操作与独立运行验收](plans/archived/002-standalone-native-user-flow.md) | 已交付归档/r1（2026-11-03）：未改Init的真实MCP输入链，原生门 vm 59/59、vue 55/55（T-06 终审双端实跑）；独立启动/进程归属/只读oracle/D-05 合同见 [standalone-native-acceptance](../specs/database/standalone-native-acceptance.md)；落地复跑门择安静窗口（F-2）。证据：plans/evidence/002/native-ui-decision.md |
 | 之后 | AutoOS统一装配 | 另立统一OS计划，接收各app单独验证/推送的精确提交；本轮不改pin |
 | 之后 | Linux支持 | WAIT_DISTRO_M1，等Nix＋COSMIC发行版基础；不阻塞本app本机任务 |
 

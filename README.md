@@ -31,17 +31,11 @@ AutoOS 通过 [`apps/auto-database`](https://github.com/auto-stack/auto-os/tree/
 开发使用独立 clone `D:/autostack/auto-database` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。
 
 
-## 当前后续计划（2026-11-03）
+## 当前后续计划
 
-[DATABASE-002：原生真实操作与独立运行验收](docs/plans/002-standalone-native-user-flow.md) 为 **executing/r1、收尾（T-00..T-06 完成，merge 归档前）**。实测结论（证据：[evidence/002 决策稿](docs/plans/evidence/002/native-ui-decision.md)；T-06 复审收据见计划 §9）：
+[DATABASE-002：原生真实操作与独立运行验收](docs/plans/archived/002-standalone-native-user-flow.md) **已交付归档/r1（2026-11-03）**：未改 .Init 的真实 MCP 输入链（autoui_type/find/press 带 handler 回执、树选择经 on_select 携项 id）原生门 `--profile vm` 59/59、`--profile vue` 55/55（T-06 终审双端实跑，绑定当次 CLI/tool 身份）；独立启动/进程归属/只读 oracle/D-05 反注入合同见 [standalone-native-acceptance 规范](docs/specs/database/standalone-native-acceptance.md)。已知环境边界：共享工具链 release 生成消费者构建对机器负载边际敏感（计划 §10 F-2），复跑门择安静窗口。
 
-- **API/拒写门 37/37 保持全绿**；独立准备/启动门（错tool/端口占用/邻居失败旁观者）全绿；D-05 敏感性控制（错库断言非零、Init 注入 hash 护栏、确定性控制）全绿。
-- **Vue 轨全绿（21/21，UI 全链 55/55）**：新 CLI 生成器 R001 拒绝两表 `:key="ri"` 重名，控制台表循环变量改 `qi`（一行，语义不变）。
-- **原生轨已解除阻塞并全绿（计划 §10 决议 c，2026-11-02）**：跨仓最小修复 auto-ui master 76b0340（iced MaxWidthPct operate 转发缺陷 + P041-D1 补丁挂载回迁）+ 本仓驱动适配（2d7a988）；未改 Init 的真实输入/树/SQL/切库/关闭/重开链 vm 59/59（work ×2 + T-06 复审 ×1）、vue 55/55 不回归。
-- 进程纪律为归属制：只按本次 spawn 树记录清理，不凭端口/命令行相似杀进程；失败/占用端口不伤旁观实例。
-- 共享工具链注意（T-06 F-2）：auto-lang b90a18996 后 release 生成消费者构建对机器负载边际敏感，落地复跑原生门须择安静窗口。
-
-先T-00核验实际源码/CLI/编译或渲染tool、已有SDK、冷准备与失败边界；实证缺项才转实际owner最小前置。既有测试入口继续复用，历史绿总数不能替代新必需UI操作。只用隔离数据/本次进程；不清共享target或终止用户实例。无实证业务缺口时不为完成计划强改业务源码。
+下一个 app 级计划未立；后续为 AutoOS 统一装配（另立统一OS计划，接收各 app 已单独验证的提交）与 Linux 支持（WAIT_DISTRO_M1）。
 
 [路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/database/basic-capabilities.md)。开发与顺序复审在D:/autostack/auto-database独立clone main，一app一写入者；不在OS组合子模块开发，不建junction/symlink。各app独立验收后由统一OS计划装配，Linux仍WAIT_DISTRO_M1。
 
