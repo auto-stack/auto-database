@@ -1,6 +1,6 @@
 ---
 plan_id: PLAN-003
-status: reviewed
+status: archived
 feature_name: Vue 对象树展开辅助函数导入修复
 author: [Codex]
 created_at: 2026-11-06
@@ -33,7 +33,7 @@ AutoUI store、既有Vue生成与vue-tsc/Vite构建。
 
 ## 4. 需求分析与背景调查
 
-授权来自用户本轮“解决这些问题，并最终完成计划054”；本修复是其中真实组合验收暴露的最小应用前置。主合同：[auto-os PLAN-054](D:/autostack/auto-os/docs/plans/054-basic-apps-unified-assembly.md)。无新预算或额外模型授权。
+授权来自用户本轮“解决这些问题，并最终完成计划054”；本修复是其中真实组合验收暴露的最小应用前置。主合同：[auto-os](D:/autostack/auto-os/README.md) 的 PLAN-054。无新预算或额外模型授权。
 
 源码基线b3499d5，src与OS054锁定280ddac一致。主检出main无tracked WIP；既有untracked .auto/保留不纳入交付。docs/specs/database/basic-capabilities.md §1 T2已要求对象树，§3要求只读；本补丁不改变这些契约。观察：db_store.at:16只导入filter_tree/collect_ids，:214调用toggle_id；root app.at和filetree.at已各自正确导入该函数。
 
@@ -75,6 +75,10 @@ V-02：OS054桌面真实数据库浏览验收包含树展开/收起、文件SHA/
   AC-02 pass：复核真实DOM/截图中的树收起/展开/选订单99.9、SQL返回张三100.5/李四250.75、CREATE TABLE被not_readonly拒绝、切库54/U054-switch-only、文件关闭、关窗重开后的张三过滤。独立oracle的两库SHA与原始输入相同，should_never_exist不存在且可重命名；后端/Spec git diff为空。保留已有untracked .auto/ui-cache.json（2202 bytes，非交付源），未清他人缓存。
   AC-03/SD-01 pass：当前docs/specs/database/basic-capabilities.md SHA9efac155edb2d220a28f947e2090e939a678e5882f0b8864966eeeceecb473bc，既有T2对象树与只读规则未变；SD-01=none，补模块依赖不增加能力/规则，supersedes/new均为空。git diff --check通过，HEAD与审前相同、无dirty tracked实现。
   pending_closeout_gates：AC-04/T-03的push、OS组合pin升级和归档尚未执行；app独立clone按用户规则保留，不删除。054整体最终独立上下文复审不由本条替代。findings：无需修复的实现发现。接入与数据证据来自明确标记的development overlay，正式OS pin仍待交付。
+- stage: merge | plan_id: PLAN-003 | plan_revision: 1 | checkpoint: prepared/landed/canonical_verified | completion_kind: delivered | review: 4abf9b15bea0bbd0fb04b3d79ace84612ba0fbd7 final pass (same-context limitation retained) | delivery_commit: dbfa1ef99242aea28ca227facc8c4c073296e898 | next: verify archive and closeout
+  用户app clone main策略覆盖通用worktree/rebase/remove步骤：源码与review均已直接main提交并正常push，origin/main实查dbfa1ef；b3499d5→delivery零merge commit、零历史重写。该delivery相对review仅Plan元数据，无实施/SDK/验证配置漂移。SD-01无规范影响已审定；main Spec blob docs/specs/database/basic-capabilities.md=c30998430bb48961e21ebdc773b48f15613ed436，SHA与审前一致，不写legacy ledger/index。
+  干净且无写入的OS054组合app已fetch/detach到交付SHA；候选OS90662ebf269c307d25e36562c5f6946e54554da7仅升Database/Blog两gitlink，子模块健康gate exit0（27 repo entries/missing_pac_at0）。preflight曾拦截生成deps/themes普通镜像；逐文件证实与vendor字节一致后只加本地Git exclude，未改/删除任何缓存或源。独立clone既有.auto/ui-cache.json也仅本地排除，文件hash不变，main source clean。app clone保留，不作为临时工作树删除。
+  具名hold OS054-DB003-CONSUMER：owner=auto-os/PLAN-054，scope=plan-artifacts/plan-003/auto-database，原因=054 AC-03/05及最终复审尚未完成、仍需本次编译与输入身份原证据；关闭=054验收/复审完成后折入Plan并删此已登记子scope。policy.json scopes/holds均已登记；不得借归档删除其他同号scope。Main OS运行/交付pin仍由054最终merge负责，当前只升级候选；独立clone生产生成物未据本修复重建，当前有效构建/运行证据仅本轮scratch Vue及Rust17839消费，部署观察项留054，不冒称生产桌面已更新。归档commit/push/实际状态尚待下一checkpoint核实。
 ## 10. 待澄清事项
 
 无新增产品决策。最终复审与OS054桌面证据未完成，不提前宣称交付。
