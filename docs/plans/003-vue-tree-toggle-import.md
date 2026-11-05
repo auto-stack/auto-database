@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 1
+current_step: 2
 total_steps: 3
 supersedes_spec_components: []
 new_spec_components: []
@@ -61,13 +61,14 @@ V-02：OS054桌面真实数据库浏览验收包含树展开/收起、文件SHA/
 
 ## 8. 执行步骤
 
-- [ ] T-01（work，AC-01）：补单行导入，复制源码到OS054 scratch并正式Vue构建，记录前红后绿。
+- [x] T-01（work，AC-01）：补单行导入，复制源码到OS054 scratch并正式Vue构建，记录前红后绿。e02551c；正式auto build -r vue exit0，Vite2.46s，原TS2304消失；clone与scratch db_store.at字节SHA一致。
 - [ ] T-02（work，依赖T-01，AC-02）：配合OS054桌面任务核对树操作与只读oracle，提交execution_done。
 - [ ] T-03（review/merge，依赖T-02，AC-03/04）：冻结同clone顺序复审、push、组合pin更新与归档；不提前勾选。
 
 ## 9. 复审记录
 
 - drafting：确认独立clone main、源码漏导入、反例真实；next=work/T-01。所有验收尚未执行。
+- work/T-01：e02551c只有store导入依赖的实现差异。固定SDK auto-ui644d8366/auto-lang23f3a031a；同一OS054 scratch项目原TS2304/exit1→修复后正式auto build -r vue exit0，vue-tsc与Vite均通过。日志D:/autostack/plan-artifacts/plan-003/auto-database/vue-build-fix.log SHA256 cd73cc4c201b80d3c91cb36e4e8fe0599d114cc0414b5c4d96816ededc786d50。T-02桌面树/只读oracle待验；未push、未改OS gitlink、未签最终review。保留原untracked .auto/。
 
 ## 10. 待澄清事项
 
