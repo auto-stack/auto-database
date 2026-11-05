@@ -13,7 +13,7 @@
 
 use back.api: db_open, db_objects, db_columns, db_table_data, db_schema, db_indexes, db_query
 use auto.env
-use components.tree_util: filter_tree, collect_ids
+use components.tree_util: filter_tree, collect_ids, toggle_id
 
 store DbStore {
     model {

@@ -1,12 +1,12 @@
 ---
 plan_id: PLAN-003
-status: drafting
+status: executing
 feature_name: Vue 对象树展开辅助函数导入修复
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 0
+current_step: 1
 total_steps: 3
 supersedes_spec_components: []
 new_spec_components: []
