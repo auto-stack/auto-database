@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 2
+current_step: 3
 total_steps: 3
 supersedes_spec_components: []
 new_spec_components: []
@@ -63,7 +63,7 @@ V-02：OS054桌面真实数据库浏览验收包含树展开/收起、文件SHA/
 
 - [x] T-01（work，AC-01）：补单行导入，复制源码到OS054 scratch并正式Vue构建，记录前红后绿。e02551c；正式auto build -r vue exit0，Vite2.46s，原TS2304消失；clone与scratch db_store.at字节SHA一致。
 - [x] T-02（work，依赖T-01，AC-02）：OS054完整八app Vue桌面3410中真实输入打开中文SQLite，树箭头收起/展开后选订单，查询客户姓名/余额，CREATE TABLE具名not_readonly拒绝；切库显示54/U054-switch-only，关闭文件和窗口后重开原库筛选张三成功。两库SHA不变、试写表不存在，请求间隙均可重命名。实现冻结e02551c，进入execution_done，T-03未执行。
-- [ ] T-03（review/merge，依赖T-02，AC-03/04）：冻结同clone顺序复审、push、组合pin更新与归档；不提前勾选。
+- [x] T-03（review/merge，依赖T-02，AC-03/04）：冻结同clone顺序复审、push、组合pin更新与归档；不提前勾选。
 
 ## 9. 复审记录
 
@@ -79,6 +79,8 @@ V-02：OS054桌面真实数据库浏览验收包含树展开/收起、文件SHA/
   用户app clone main策略覆盖通用worktree/rebase/remove步骤：源码与review均已直接main提交并正常push，origin/main实查dbfa1ef；b3499d5→delivery零merge commit、零历史重写。该delivery相对review仅Plan元数据，无实施/SDK/验证配置漂移。SD-01无规范影响已审定；main Spec blob docs/specs/database/basic-capabilities.md=c30998430bb48961e21ebdc773b48f15613ed436，SHA与审前一致，不写legacy ledger/index。
   干净且无写入的OS054组合app已fetch/detach到交付SHA；候选OS90662ebf269c307d25e36562c5f6946e54554da7仅升Database/Blog两gitlink，子模块健康gate exit0（27 repo entries/missing_pac_at0）。preflight曾拦截生成deps/themes普通镜像；逐文件证实与vendor字节一致后只加本地Git exclude，未改/删除任何缓存或源。独立clone既有.auto/ui-cache.json也仅本地排除，文件hash不变，main source clean。app clone保留，不作为临时工作树删除。
   具名hold OS054-DB003-CONSUMER：owner=auto-os/PLAN-054，scope=plan-artifacts/plan-003/auto-database，原因=054 AC-03/05及最终复审尚未完成、仍需本次编译与输入身份原证据；关闭=054验收/复审完成后折入Plan并删此已登记子scope。policy.json scopes/holds均已登记；不得借归档删除其他同号scope。Main OS运行/交付pin仍由054最终merge负责，当前只升级候选；独立clone生产生成物未据本修复重建，当前有效构建/运行证据仅本轮scratch Vue及Rust17839消费，部署观察项留054，不冒称生产桌面已更新。归档commit/push/实际状态尚待下一checkpoint核实。
+- stage: merge | plan_id: PLAN-003 | plan_revision: 1 | outcome: pass | checkpoint: archived/cleaned-with-named-hold | archive_commit: cdb8ad2ab8ca32bebb198f4af3017cccf218597e (origin/main equal verified) | archive_path: docs/plans/archived/003-vue-tree-toggle-import.md | completion_kind: delivered
+  实际archive已由Git追踪、active路径已移走、status archived、T-01..03计数3/3；唯一跨仓Markdown链接改指稳定AutoOS README并保留PLAN-054标识，实际路径可达，避免父Plan之后归档形成死链。review后仅证据/归档元数据变化，canonical Spec无漂移。默认分支线性提交与正常push已实查，无worktree/branch待删除（用户规定保留app独立clone main）；当前clean source，未知/他人文件未删除。具名hold OS054-DB003-CONSUMER已在policy.json登记owner/原因/关闭条件，保留是054未完成验收的依赖，不是历史材料保留配额。其释放与scratch安全清理由054最终closeout负责；当前已完成本app源码交付、规范验证、归档和有条件清理责任。Main OS实际部署/最终pin仍待054，相关旧产物观察项保留。
 ## 10. 待澄清事项
 
 无新增产品决策。最终复审与OS054桌面证据未完成，不提前宣称交付。
